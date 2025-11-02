@@ -1,0 +1,132 @@
+
+---
+title: "Rapport d'étude – Greentech Solutions (DPE)"
+author: "Ton Nom / Équipe"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: false
+    number_sections: false
+params:
+  departement: "23"
+  type_batiment: "tous" # "maison", "appartement" or "tous"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.width=7, fig.height=4)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(DT)
+```
+
+# 1. Introduction
+Ce rapport synthétique (≤ 4 pages) présente une **analyse exploratoire** des consommations énergétiques issues des jeux de données DPE.  
+Il est paramétrable par **département** (paramètre `r params$departement`) et **type de bâtiment** (paramètre `r params$type_batiment`).
+
+**Problématique principale** : *La classe DPE et le type de bâtiment influencent-ils la consommation d'énergie primaire (kWh/m²/an) ?*
+
+# 2. Chargement et préparation des données
+> Remplacez `"dpe_data.csv"` par le fichier extrait de l'API ADEME ou par l'export de votre app Shiny.
+
+```{r}
+# Lecture (adapter le chemin / nom de fichier si nécessaire)
+donnees <- read.csv("dpe_data.csv", sep = ";", stringsAsFactors = FALSE)
+
+# Variables attendues (exemples) :
+# code_departement_ban, type_batiment, etiquette_dpe, etiquette_ges,
+# conso_5_usages_par_m2_ep, surface_habitable_logement, annee_construction, nom_commune_brut, longitude, latitude
+
+# Nettoyage minimal et typage
+donnees <- donnees %>%
+  mutate(
+    code_departement_ban = as.character(code_departement_ban),
+    type_batiment = tolower(type_batiment),
+    etiquette_dpe = factor(etiquette_dpe, levels = c("A","B","C","D","E","F","G")),
+    etiquette_ges = factor(etiquette_ges, levels = c("A","B","C","D","E","F","G")),
+    conso = as.numeric(conso_5_usages_par_m2_ep),
+    surface = as.numeric(surface_habitable_logement),
+    annee_construction = as.numeric(annee_construction)
+  ) %>% 
+  filter(!is.na(conso), conso >= 0)
+
+# Application des filtres paramétrés
+if (params$type_batiment != "tous") {
+  donnees <- donnees %>% filter(type_batiment == params$type_batiment)
+}
+donnees <- donnees %>% filter(code_departement_ban == params$departement)
+```
+
+**Taille du jeu filtré** : `r nrow(donnees)` observations.
+
+# 3. Indicateurs clés (KPI)
+```{r}
+kpi <- donnees %>%
+  summarise(
+    nb_logements = n(),
+    conso_moy = round(mean(conso, na.rm = TRUE), 1),
+    surface_moy = round(mean(surface, na.rm = TRUE), 1),
+    med_conso = round(median(conso, na.rm = TRUE), 1)
+  )
+kable(kpi, caption = "Indicateurs clés (jeu filtré)")
+```
+
+# 4. Visualisations essentielles
+
+## 4.1 Répartition des étiquettes DPE
+```{r fig.cap="Répartition des classes DPE (nombre d'observations)"}
+dpe_colors <- c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000")
+ggplot(donnees, aes(x = etiquette_dpe, fill = etiquette_dpe)) +
+  geom_bar(color="black") +
+  scale_fill_manual(values = dpe_colors, drop = FALSE) +
+  labs(x = "Classe DPE", y = "Nombre") +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(hjust=0.5)) +
+  ggtitle("Répartition des étiquettes DPE")
+```
+
+## 4.2 Consommation selon la classe DPE (boxplot)
+```{r fig.cap="Consommation (kWh/m²/an) par classe DPE — boxplot"}
+ggplot(donnees, aes(x = etiquette_dpe, y = conso, fill = etiquette_dpe)) +
+  geom_boxplot(outlier.alpha = 0.2) +
+  scale_fill_manual(values = dpe_colors, drop = FALSE) +
+  labs(x = "Classe DPE", y = "Consommation (kWh/m²/an)") +
+  coord_cartesian(ylim = c(0, min(800, max(donnees$conso, na.rm=TRUE)))) +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(hjust=0.5)) +
+  ggtitle("Consommation selon la classe DPE")
+```
+
+## 4.3 Corrélation surface ↔ consommation
+```{r fig.cap="Surface vs consommation avec droite de régression"}
+df_scatter <- donnees %>% filter(!is.na(surface), surface > 0, conso < 2000)
+if (nrow(df_scatter) > 2) {
+  m <- lm(conso ~ surface, data = df_scatter)
+  r2 <- round(summary(m)$r.squared, 2)
+} else {
+  r2 <- NA
+}
+ggplot(df_scatter, aes(x = surface, y = conso)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", color = "black") +
+  labs(x = "Surface (m²)", y = "Consommation (kWh/m²/an)",
+       subtitle = paste0("R² = ", ifelse(is.na(r2), "NA", r2))) +
+  theme_minimal() +
+  ggtitle("Corrélation Surface / Consommation")
+```
+
+# 5. Interprétation rapide
+- **Tendance générale** : les classes DPE de type A–C présentent, en moyenne, des consommations plus faibles que les classes D–G.  
+- **Surface** : la corrélation surface → conso est généralement _faible à modérée_ (voir R² dans le nuage de points) ; d'autres facteurs (isolation, chauffage) expliquent les variations.  
+- **Limites** : données hétérogènes, valeurs manquantes, et différences entre mesures déclaratives vs mesurées. Les conclusions sont exploratoires et doivent être approfondies si besoin.
+
+# 6. Génération automatisée
+Vous pouvez exporter un rapport filtré en modifiant les paramètres et en exécutant depuis R :
+
+```r
+rmarkdown::render("rapport_dpe.Rmd", params = list(departement = "23", type_batiment = "tous"))
+```
+
+# Annexes (si espace)
+- Indiquer ici la source : API ADEME DPE (logements existants / neufs).
+- Indiquer les champs utilisés et les transformations faites.
