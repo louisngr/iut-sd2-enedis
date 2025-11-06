@@ -23,7 +23,7 @@ library(shinyWidgets)
 
 # --- FONCTION DE RÉCUPÉRATION DES DONNÉES ---
 get_ademe_data_multi <- function(departements = c("23", "19", "87"),
-                                 size = 1500, # Taille augmentée
+                                 size = 1500, 
                                  dataset = "dpe03existant") {
   base_url <- "https://data.ademe.fr/data-fair/api/v1/datasets"
   full_url <- paste0(base_url, "/", dataset, "/lines")
@@ -81,14 +81,13 @@ get_ademe_data_multi <- function(departements = c("23", "19", "87"),
 
 # --- UI (User Interface) ---
 ui <- fluidPage(
-  # Thème par défaut: flatly (Light)
-  theme = shinytheme("flatly"), 
+  theme = shinytheme("flatly"), # Thème Light par défaut
   shinyjs::useShinyjs(),
   
-  # CSS pour un design sobre et la gestion du thème
+  # CSS pour un design sobre et la gestion du thème Noir/Blanc
   tags$head(
     tags$style(HTML("
-      /* Configuration générale et sobriété */
+      /* Configuration générale Light Theme (flatly) */
       .nav-tabs > li.active > a, .nav-tabs > li.active > a:focus, .nav-tabs > li.active > a:hover {
         background-color: #007bff !important;
         color: white !important;
@@ -100,39 +99,55 @@ ui <- fluidPage(
       .btn-primary:hover { background-color: #218838; border-color: #1e7e34; }
       body { background-color: #f8f9fa; } 
 
-      /* Positionnement du sélecteur de thème moderne */
+      /* Positionnement du switch de thème (modernisé) */
       #theme_control {
         position: absolute;
         top: 15px;
         right: 15px;
         z-index: 1000;
-        width: 150px; 
       }
-      
-      /* Gestion du thème sombre (Dark Mode) */
+
+      /* Styles Dark Mode (Noir) */
       .dark-mode-body {
-        background-color: #343a40 !important;
-        color: #adb5bd;
+        background-color: #212529 !important; /* Presque noir */
+        color: #f8f9fa !important; /* Écriture blanche */
       }
       .dark-mode-body .well {
-        background-color: #495057 !important;
-        color: #adb5bd;
-        border-color: #6c757d;
+        background-color: #343a40 !important; /* Panneaux sombres */
+        color: #f8f9fa !important;
+        border-color: #495057;
       }
       .dark-mode-body h4 {
-        color: #17a2b8;
-        border-bottom-color: #17a2b8;
+        color: #17a2b8 !important; /* Titres clairs */
+        border-bottom-color: #17a2b8 !important;
       }
+      /* Rendre les inputs lisibles */
       .dark-mode-body .form-control, .dark-mode-body .selectize-input {
-        background-color: #6c757d;
-        color: #fff;
-        border-color: #6c757d;
+        background-color: #495057 !important;
+        color: #f8f9fa !important;
+        border-color: #6c757d !important;
       }
-      
-      /* Fix pour le thème cosmo (ou autre thème clair) pour garantir la visibilité des logos */
-      .navbar-default.cosmo-fix {
-          background-color: #f8f9fa !important; /* Gris clair ou blanc */
-          border-color: #f8f9fa !important;
+      /* Rendre la navbar lisible */
+      .dark-mode-body .navbar-default {
+          background-color: #212529 !important;
+          border-color: #212529 !important;
+      }
+      .dark-mode-body .navbar-default .navbar-brand, 
+      .dark-mode-body .navbar-default .nav > li > a {
+        color: #f8f9fa !important;
+      }
+      /* Pour le tableau DT */
+      .dark-mode-body .dataTables_wrapper .dataTables_length,
+      .dark-mode-body .dataTables_wrapper .dataTables_filter,
+      .dark-mode-body .dataTables_wrapper .dataTables_info,
+      .dark-mode-body .dataTables_wrapper .dataTables_processing,
+      .dark-mode-body .dataTables_wrapper .dataTables_paginate {
+        color: #f8f9fa !important;
+      }
+      .dark-mode-body .dataTables_wrapper .paginate_button {
+        color: #f8f9fa !important;
+        background: #343a40 !important;
+        border-color: #495057 !important;
       }
     "))
   ),
@@ -167,14 +182,6 @@ ui <- fluidPage(
     id = "main_app",
     style = "display: none;",
     
-    # Sélecteur de thème moderne positionné en haut à droite
-    div(id = "theme_control",
-        selectInput("theme_select", 
-                    "Thème :",
-                    choices = c("Clair (flatly)" = "flatly", "Neutre (cosmo)" = "cosmo", "Sombre (darkly)" = "darkly"),
-                    selected = "flatly")
-    ),
-    
     navbarPage(
       title = tags$span("DPE – Analyse", 
                         # Ajout des logos dans la barre de navigation
@@ -189,7 +196,20 @@ ui <- fluidPage(
           column(4,
                  actionButton("refresh_data", "Rafraîchir les Données", icon = icon("sync-alt"), class = "btn-info")
           ),
-          column(4, offset = 4, 
+          column(4, 
+                 # Switch Button Thème 
+                 switchInput(
+                   inputId = "theme_switch",
+                   label = "Thème :",
+                   value = FALSE,
+                   onLabel = "Noir",
+                   offLabel = "Blanc",
+                   onStatus = "dark",
+                   offStatus = "default",
+                   inline = TRUE
+                 )
+          ),
+          column(4, 
                  textOutput("last_update")
           )
         ),
@@ -204,11 +224,11 @@ ui <- fluidPage(
                    tags$p("Les données sont issues de l'**API Data ADEME** et concernent les diagnostics de performance énergétique (DPE). L'objectif est d'appliquer des méthodes de **Science des Données** pour analyser les tendances de consommation et d'émission de GES."),
                    tags$p("Le DPE est noté par deux étiquettes : l'**Étiquette Énergie (DPE)** et l'**Étiquette Climat (GES)**."),
                    tags$hr(),
-                   tags$p("L'application est structurée en 4 onglets :"),
+                   tags$p("L'application est structurée en 3 onglets d'analyse :"),
                    tags$ul(
-                     tags$li("Analyse Unidimensionnelle et Temporelle : DPE, GES, Type de bâtiment et impact de l'année de construction pour le département sélectionné."),
+                     tags$li("Analyse Unidimensionnelle et Temporelle : GES, Type de bâtiment et impact de l'année de construction pour le département sélectionné."),
                      tags$li("Analyse Bi-variée et Géographique : Corrélation, Régression, Cartographie et comparaison régionale."),
-                     tags$li("Synthèse Multicritère : Classement par communes, Boxplot Conso/GES avec filtrage.")
+                     tags$li("Synthèse Multicritère : Classement par communes et Boxplot Conso/GES.")
                    )
                  ),
                  # TABLEAUX DE DONNÉES BRUTES (Fusionnés)
@@ -249,12 +269,12 @@ ui <- fluidPage(
                    )
                  ),
                  fluidRow(
-                   column(6, wellPanel(h4("Répartition étiquettes DPE"), plotOutput("histogram_dpe"), downloadButton("export_dpe_png", "Exporter PNG"))),
-                   column(6, wellPanel(h4("Distribution des émissions de GES (Histogramme)"), plotOutput("histogram_ges_freq"), downloadButton("export_ges_png", "Exporter PNG")))
+                   # Répartition DPE supprimée
+                   column(6, wellPanel(h4("Distribution des émissions de GES (Histogramme)"), plotOutput("histogram_ges_freq"), downloadButton("export_ges_png", "Exporter PNG"))),
+                   column(6, wellPanel(h4("Distribution des Émissions GES : Maison vs Appartement"), plotOutput("density_conso_by_type"), downloadButton("export_conso_type_png", "Exporter PNG")))
                  ),
                  fluidRow(
-                   column(6, wellPanel(h4("Distribution de la consommation : Maison vs Appartement"), plotOutput("density_conso_by_type"), downloadButton("export_conso_type_png", "Exporter PNG"))),
-                   column(6, wellPanel(
+                   column(12, wellPanel(
                      fluidRow(
                        column(12, 
                               h4("Consommation EP selon Période de Construction"),
@@ -333,14 +353,8 @@ ui <- fluidPage(
                fluidPage(
                  wellPanel(
                    fluidRow(
-                     column(4,
-                            # Filtre DPE avec option "Toutes"
-                            selectInput("dpe_filter", "Filtrer par Étiquettes DPE :",
-                                        choices = c("Toutes (A à G)" = "ABCDEFG", LETTERS[1:7]),
-                                        selected = c("ABCDEFG"), # Sélection par défaut corrigée
-                                        multiple = TRUE)
-                     ),
-                     column(4,
+                     # Filtre DPE supprimé, Conso EP prend la colonne 6
+                     column(6,
                             sliderInput("conso_limit", "Limiter la Conso EP (kWh/m²/an) :",
                                         min = 0, max = 800, value = c(0, 800), step = 50)
                      )
@@ -360,49 +374,30 @@ ui <- fluidPage(
 # --- Serveur (Logique de l'application) ---
 server <- function(input, output, session) {
   
-  # --- 0. Gestion du Thème (Light/Dark Mode) ---
-  current_theme <- reactiveVal("flatly")
+  # --- 0. Gestion du Thème (Noir/Blanc) ---
   
-  observeEvent(input$theme_select, {
-    
-    selected_theme <- input$theme_select
-    
-    # 1. Mise à jour du thème Shiny
-    session$sendCustomMessage(type = 'update-navbar-theme', message = selected_theme)
-    current_theme(selected_theme)
-    
-    # 2. Gestion de la classe CSS pour le thème sombre (darkly)
-    if (selected_theme == "darkly") {
-      addCssClass(selector = "body", class = "dark-mode-body")
-    } else {
-      removeCssClass(selector = "body", class = "dark-mode-body")
-    }
-    
-    # 3. FIX pour le thème cosmo: Rendre le navbar clair pour voir les logos
-    if (selected_theme == "cosmo") {
-      shinyjs::runjs("$('.navbar-default').addClass('cosmo-fix');")
-    } else {
-      shinyjs::runjs("$('.navbar-default').removeClass('cosmo-fix');")
-    }
-  })
-  
-  # Fonction pour appliquer le thème sélectionné sur tout le body
-  observeEvent(current_theme(), {
-    session$sendCustomMessage(type = 'set-theme', message = list(
-      theme = shinytheme(current_theme()),
-      selector = "body"
-    ))
-  })
-  
-  # Injecte un script JS pour gérer le changement de thème sur tout le body (nécessaire avec navbarPage)
+  # Injecte un script JS pour appliquer la classe dark-mode-body au body
   tags$head(tags$script(HTML("
     Shiny.setInputValue('theme_loaded', true, {priority: 'event'});
-    Shiny.addCustomMessageHandler('set-theme', function(message) {
-      $('body').attr('class', '');
-      $('body').addClass('container-fluid');
-      $('body').addClass(message.theme.name);
-    });
   ")))
+  
+  observeEvent(input$theme_switch, {
+    if (input$theme_switch) {
+      # Dark Mode (Noir)
+      shinyjs::addClass(selector = "body", class = "dark-mode-body")
+      shinyjs::removeClass(selector = "body", class = "flatly")
+      
+      # FIX Navbar: Rendre les éléments clairs manuellement si nécessaire
+      shinyjs::runjs("$('.navbar-default').addClass('dark-mode-body');") 
+    } else {
+      # Light Mode (Blanc)
+      shinyjs::removeClass(selector = "body", class = "dark-mode-body")
+      shinyjs::addClass(selector = "body", class = "flatly")
+      
+      # Retirer le FIX dark-mode de la navbar
+      shinyjs::runjs("$('.navbar-default').removeClass('dark-mode-body');")
+    }
+  })
   
   # --- 1. Gestion de la connexion ---
   login_status <- reactiveVal(FALSE)
@@ -521,23 +516,6 @@ server <- function(input, output, session) {
   dpe_colors <- c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000")
   ges_colors <- dpe_colors
   
-  # 4.1. Répartition DPE
-  generate_histogram_dpe <- function(df) {
-    title_dep <- if (input$dep_select_1 == "all") "Tous Départements" else paste("Département", unique(df$code_departement_ban))
-    ggplot(df, aes(x = etiquette_dpe, fill = etiquette_dpe)) +
-      geom_bar(color = "black") +
-      scale_fill_manual(values = dpe_colors, drop = FALSE) +
-      labs(title = paste("Répartition des étiquettes DPE (", title_dep, ")"), 
-           x = "Étiquette DPE", y = "Nombre d’observations") +
-      theme_minimal() +
-      theme(legend.position = "none", plot.title = element_text(hjust = 0.5, face = "bold", size=14))
-  }
-  output$histogram_dpe <- renderPlot({ generate_histogram_dpe(filter_dep_analysis()) })
-  output$export_dpe_png <- downloadHandler(
-    filename = function() { paste("repartition_dpe-", Sys.Date(), ".png", sep="") },
-    content = function(file) { ggsave(file, plot = generate_histogram_dpe(filter_dep_analysis()), device = "png", width = 8, height = 6) }
-  )
-  
   # 4.2. Distribution GES (Histogramme de fréquences)
   output$histogram_ges_freq <- renderPlot({ 
     df <- filter_dep_analysis() %>% filter(emission_ges_chauffage > 0 & emission_ges_chauffage < 500)
@@ -568,29 +546,31 @@ server <- function(input, output, session) {
     }
   )
   
-  # 4.3. Densité Conso par Type
-  generate_density_conso_by_type <- function(df) {
+  # 4.3. Densité GES par Type (Ancienne conso, maintenant GES)
+  generate_density_ges_by_type <- function(df) {
     df2 <- df %>% filter(type_batiment %in% c("maison", "appartement"),
-                         conso_5_usages_par_m2_ep < 800)
+                         emission_ges_chauffage >= 0, 
+                         emission_ges_chauffage < 200) # Filtre les valeurs extrêmes de GES pour la lisibilité
     title_dep <- if (input$dep_select_1 == "all") "Tous Départements" else paste("Département", unique(df$code_departement_ban))
     
-    ggplot(df2, aes(x = conso_5_usages_par_m2_ep, fill = type_batiment)) +
+    ggplot(df2, aes(x = emission_ges_chauffage, fill = type_batiment)) +
       geom_density(alpha = 0.6, adjust=1.5) +
       scale_fill_manual(values = c("maison"="#e76f51", "appartement"="#2a9d8f")) +
-      labs(title = paste("Distribution de la consommation : Maison vs Appartement (", title_dep, ")"),
-           x = "Consommation énergie primaire (kWh/m²/an)",
+      labs(title = paste("Distribution des Émissions GES : Maison vs Appartement (", title_dep, ")"),
+           x = "Émission GES (kg CO₂e/m²/an)", 
            y = "Densité",
            fill = "Type de bâtiment") +
-      coord_cartesian(xlim = c(0,500)) + 
+      # Correction de l'origine (0,0) et limite l'affichage à 200 kgCO2e
+      scale_x_continuous(expand = c(0, 0)) + 
+      scale_y_continuous(expand = c(0, 0)) + 
+      coord_cartesian(xlim = c(0,200)) + 
       theme_minimal() +
-      theme(legend.position = "bottom", plot.title = element_text(hjust=0.5, face="bold", size=14),
-            # Correction de l'origine (0,0)
-            panel.spacing = unit(c(0, 0, 0, 0), "cm")) 
+      theme(legend.position = "bottom", plot.title = element_text(hjust=0.5, face="bold", size=14)) 
   }
-  output$density_conso_by_type <- renderPlot({ generate_density_conso_by_type(filter_dep_analysis()) })
+  output$density_conso_by_type <- renderPlot({ generate_density_ges_by_type(filter_dep_analysis()) })
   output$export_conso_type_png <- downloadHandler(
-    filename = function() { paste("density_conso_type-", Sys.Date(), ".png", sep="") },
-    content = function(file) { ggsave(file, plot = generate_density_conso_by_type(filter_dep_analysis()), device = "png", width = 8, height = 6) }
+    filename = function() { paste("density_ges_type-", Sys.Date(), ".png", sep="") },
+    content = function(file) { ggsave(file, plot = generate_density_ges_by_type(filter_dep_analysis()), device = "png", width = 8, height = 6) }
   )
   
   # 4.4. Conso par Année (Boxplot / Barres)
@@ -635,18 +615,8 @@ server <- function(input, output, session) {
   generate_bar_conso_by_commune <- function(df) {
     df2 <- df %>% filter(!is.na(conso_5_usages_par_m2_ep))
     
-    # Correction de la logique du filtre DPE
-    if (length(input$dpe_filter) > 1 && "ABCDEFG" %in% input$dpe_filter) {
-      dpe_to_filter <- input$dpe_filter[input$dpe_filter != "ABCDEFG"] # Prend les lettres individuelles si "Toutes" est aussi coché
-    } else if ("ABCDEFG" %in% input$dpe_filter) {
-      dpe_to_filter <- LETTERS[1:7] # Prend toutes les lettres si "Toutes" est seul
-    } else {
-      dpe_to_filter <- input$dpe_filter # Prend les lettres sélectionnées (ou vide)
-    }
-    
-    # Applique les filtres DPE et Conso de l'onglet IV (Multicritère)
+    # Applique le filtre Conso de l'onglet IV (Multicritère)
     df2 <- df2 %>% 
-      filter(etiquette_dpe %in% dpe_to_filter) %>%
       filter(conso_5_usages_par_m2_ep >= input$conso_limit[1] & conso_5_usages_par_m2_ep <= input$conso_limit[2])
     
     df_comm <- df2 %>% 
@@ -673,18 +643,8 @@ server <- function(input, output, session) {
   generate_boxplot_conso_by_ges <- function(df) {
     df2 <- df %>% filter(!is.na(etiquette_ges))
     
-    # Correction de la logique du filtre DPE
-    if (length(input$dpe_filter) > 1 && "ABCDEFG" %in% input$dpe_filter) {
-      dpe_to_filter <- input$dpe_filter[input$dpe_filter != "ABCDEFG"]
-    } else if ("ABCDEFG" %in% input$dpe_filter) {
-      dpe_to_filter <- LETTERS[1:7]
-    } else {
-      dpe_to_filter <- input$dpe_filter
-    }
-    
-    # Applique les filtres DPE et Conso de l'onglet IV (Multicritère)
+    # Applique le filtre Conso de l'onglet IV (Multicritère)
     df2 <- df2 %>% 
-      filter(etiquette_dpe %in% dpe_to_filter) %>%
       filter(conso_5_usages_par_m2_ep >= input$conso_limit[1] & conso_5_usages_par_m2_ep <= input$conso_limit[2])
     
     ggplot(df2, aes(x = etiquette_ges, y = conso_5_usages_par_m2_ep, fill = etiquette_ges)) +
@@ -818,7 +778,7 @@ server <- function(input, output, session) {
           "<b>DPE :</b> ", etiquette_dpe, "<br>",
           "<b>Dépt :</b> ", code_departement_ban, "<br>",
           "<b>Commune :</b> ", nom_commune_brut, "<br>",
-          "<b>Conso EP :</b> ", round(conso_5_usages_par_m2_ep, 1), " kWh/m²/an"
+          "<b>Émission GES :</b> ", round(emission_ges_chauffage, 1), " kgCO₂e/m²/an"
         )
       ) %>%
       addLegend(pal = pal, values = LETTERS[1:7], opacity = 1, title = "Étiquette DPE")
