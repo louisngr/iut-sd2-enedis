@@ -1,13 +1,14 @@
 # --- INSTALLATION DES PACKAGES (si nécessaire) ---
-# install.packages("shiny")
-# install.packages("httr")
-# install.packages("jsonlite")
-# install.packages("DT")
-# install.packages("ggplot2")
-# install.packages("dplyr")
-# install.packages("shinyjs")
-# install.packages("shinythemes") 
-# install.packages("leaflet")
+# library(shiny)
+# library(httr)
+# library(jsonlite)
+# library(DT)
+# library(ggplot2)
+# library(dplyr)
+# library(shinyjs)
+# library(shinythemes) 
+# library(leaflet) 
+# library(shinyWidgets) 
 
 library(shiny)
 library(httr)
@@ -18,15 +19,18 @@ library(dplyr)
 library(shinyjs)
 library(shinythemes) 
 library(leaflet) 
+library(shinyWidgets) 
 
 # --- FONCTION DE RÉCUPÉRATION DES DONNÉES ---
 get_ademe_data_multi <- function(departements = c("23", "19", "87"),
-                                 size = 500,
+                                 size = 1500, # Taille augmentée
                                  dataset = "dpe03existant") {
   base_url <- "https://data.ademe.fr/data-fair/api/v1/datasets"
   full_url <- paste0(base_url, "/", dataset, "/lines")
   
   departements <- as.character(departements)
+  
+  req(length(departements) > 0)
   
   quoted <- paste0('"', departements, '"')
   qs_filter <- paste0("code_departement_ban:(", paste(quoted, collapse = " OR "), ")")
@@ -77,21 +81,59 @@ get_ademe_data_multi <- function(departements = c("23", "19", "87"),
 
 # --- UI (User Interface) ---
 ui <- fluidPage(
+  # Thème par défaut: flatly (Light)
+  theme = shinytheme("flatly"), 
   shinyjs::useShinyjs(),
   
-  # CSS personnalisé
+  # CSS pour un design sobre et la gestion du thème
   tags$head(
     tags$style(HTML("
+      /* Configuration générale et sobriété */
       .nav-tabs > li.active > a, .nav-tabs > li.active > a:focus, .nav-tabs > li.active > a:hover {
         background-color: #007bff !important;
         color: white !important;
         border-color: #007bff !important;
       }
       h4 { color: #007bff; font-weight: 600; font-size: 1.4em; border-bottom: 3px solid #007bff; padding-bottom: 5px; margin-bottom: 15px; }
-      .well { background-color: white; border: 1px solid #ced4da; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; }
+      .well { border: 1px solid #ced4da; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 25px; }
       .btn-primary { background-color: #28a745; border-color: #28a745; }
       .btn-primary:hover { background-color: #218838; border-color: #1e7e34; }
-      body { background-color: #e9ecef; }
+      body { background-color: #f8f9fa; } 
+
+      /* Positionnement du sélecteur de thème moderne */
+      #theme_control {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        z-index: 1000;
+        width: 150px; 
+      }
+      
+      /* Gestion du thème sombre (Dark Mode) */
+      .dark-mode-body {
+        background-color: #343a40 !important;
+        color: #adb5bd;
+      }
+      .dark-mode-body .well {
+        background-color: #495057 !important;
+        color: #adb5bd;
+        border-color: #6c757d;
+      }
+      .dark-mode-body h4 {
+        color: #17a2b8;
+        border-bottom-color: #17a2b8;
+      }
+      .dark-mode-body .form-control, .dark-mode-body .selectize-input {
+        background-color: #6c757d;
+        color: #fff;
+        border-color: #6c757d;
+      }
+      
+      /* Fix pour le thème cosmo (ou autre thème clair) pour garantir la visibilité des logos */
+      .navbar-default.cosmo-fix {
+          background-color: #f8f9fa !important; /* Gris clair ou blanc */
+          border-color: #f8f9fa !important;
+      }
     "))
   ),
   
@@ -106,9 +148,6 @@ ui <- fluidPage(
       actionButton("loginButton", "Se connecter", class = "btn-primary"),
       br(),
       br(),
-      textOutput("loginMessage"),
-      
-      # LOGOS
       fluidRow(
         column(6, align = "center",
                tags$img(src = "https://www.univ-lyon2.fr/uas/ksup/LOGO_PIED_DE_PAGE/Footer_800px_281_marque-etat-logo-rouge.png", 
@@ -128,8 +167,20 @@ ui <- fluidPage(
     id = "main_app",
     style = "display: none;",
     
+    # Sélecteur de thème moderne positionné en haut à droite
+    div(id = "theme_control",
+        selectInput("theme_select", 
+                    "Thème :",
+                    choices = c("Clair (flatly)" = "flatly", "Neutre (cosmo)" = "cosmo", "Sombre (darkly)" = "darkly"),
+                    selected = "flatly")
+    ),
+    
     navbarPage(
-      title = "Diagnostic de Performance Énergétique (DPE) – Analyse",
+      title = tags$span("DPE – Analyse", 
+                        # Ajout des logos dans la barre de navigation
+                        tags$img(src = "https://www.univ-lyon2.fr/uas/ksup/LOGO_PIED_DE_PAGE/Footer_800px_281_marque-etat-logo-rouge.png", height = "30px", style = "margin-left: 10px; margin-right: 5px;"),
+                        tags$img(src = "https://upload.wikimedia.org/wikipedia/fr/archive/7/77/20220206181136!Logo_enedis_header.png", height = "30px")
+      ),
       id = "main_nav",
       
       header = tagList(
@@ -138,8 +189,7 @@ ui <- fluidPage(
           column(4,
                  actionButton("refresh_data", "Rafraîchir les Données", icon = icon("sync-alt"), class = "btn-info")
           ),
-          column(4, 
-                 offset = 4, 
+          column(4, offset = 4, 
                  textOutput("last_update")
           )
         ),
@@ -158,8 +208,7 @@ ui <- fluidPage(
                    tags$ul(
                      tags$li("Analyse Unidimensionnelle et Temporelle : DPE, GES, Type de bâtiment et impact de l'année de construction pour le département sélectionné."),
                      tags$li("Analyse Bi-variée et Géographique : Corrélation, Régression, Cartographie et comparaison régionale."),
-                     tags$li("Synthèse Multicritère : Classement par communes, Boxplot Conso/GES avec filtrage."),
-                     tags$li("Contexte et Données Brutes (cet onglet) : Informations générales et accès aux jeux de données brutes.")
+                     tags$li("Synthèse Multicritère : Classement par communes, Boxplot Conso/GES avec filtrage.")
                    )
                  ),
                  # TABLEAUX DE DONNÉES BRUTES (Fusionnés)
@@ -168,10 +217,12 @@ ui <- fluidPage(
                    fluidRow(
                      column(4, 
                             selectInput("raw_data_selector", "Afficher les données :",
-                                        choices = c("Département d'Analyse" = "1dep", "Comparaison Régionale (23 vs 19)" = "multi"),
-                                        selected = "1dep")
+                                        choices = c("Tous départements confondus" = "all_deps", "Choix unique du département" = "1dep"), 
+                                        selected = "all_deps")
                      ),
-                     column(4, offset = 4, style = "margin-top: 25px;",
+                     column(4, uiOutput("raw_dep_select_ui") 
+                     ),
+                     column(4, style = "margin-top: 25px;",
                             downloadButton("export_raw_csv", "Exporter CSV des données affichées")
                      )
                    ),
@@ -207,7 +258,6 @@ ui <- fluidPage(
                      fluidRow(
                        column(12, 
                               h4("Consommation EP selon Période de Construction"),
-                              # Radio buttons déplacés sous le titre du graphique
                               radioButtons("periode_type", "Métrique :",
                                            choices = c("Moyenne (Barres)" = "bar", "Distribution (Boxplot)" = "box"),
                                            selected = "bar", inline = TRUE)
@@ -258,10 +308,16 @@ ui <- fluidPage(
                                         choices = c("Creuse (23)" = "23", "Corrèze (19)" = "19", "Haute-Vienne (87)" = "87", "Tous (23, 19, 87)" = "all"),
                                         selected = "23")
                      ),
-                     column(8,
-                            selectInput("dep_compare", "Comparaison Régionale (Dépt A vs B) :",
-                                        choices = c("23 vs 19" = "23;19", "19 vs 87" = "19;87", "23 vs 87" = "23;87"),
-                                        selected = "23;19")
+                     # Mise à jour de la comparaison régionale : 2 selectInputs
+                     column(4, 
+                            selectInput("dep_compare_a", "Comparaison Régionale : Département A",
+                                        choices = c("23", "19", "87"),
+                                        selected = "23")
+                     ),
+                     column(4, 
+                            selectInput("dep_compare_b", "Comparaison Régionale : Département B",
+                                        choices = c("23", "19", "87"),
+                                        selected = "19")
                      )
                    ),
                    fluidRow(
@@ -278,10 +334,10 @@ ui <- fluidPage(
                  wellPanel(
                    fluidRow(
                      column(4,
-                            # SelectInput avec multiple=TRUE pour choisir plusieurs catégories DPE
+                            # Filtre DPE avec option "Toutes"
                             selectInput("dpe_filter", "Filtrer par Étiquettes DPE :",
-                                        choices = LETTERS[1:7],
-                                        selected = LETTERS[1:7], 
+                                        choices = c("Toutes (A à G)" = "ABCDEFG", LETTERS[1:7]),
+                                        selected = c("ABCDEFG"), # Sélection par défaut corrigée
                                         multiple = TRUE)
                      ),
                      column(4,
@@ -298,11 +354,55 @@ ui <- fluidPage(
       )
     ) # Fin navbarPage
   ) # Fin div main_app
-) # Fin fluidPage (Termine l'objet UI)
+) # Fin fluidPage 
 
 
 # --- Serveur (Logique de l'application) ---
 server <- function(input, output, session) {
+  
+  # --- 0. Gestion du Thème (Light/Dark Mode) ---
+  current_theme <- reactiveVal("flatly")
+  
+  observeEvent(input$theme_select, {
+    
+    selected_theme <- input$theme_select
+    
+    # 1. Mise à jour du thème Shiny
+    session$sendCustomMessage(type = 'update-navbar-theme', message = selected_theme)
+    current_theme(selected_theme)
+    
+    # 2. Gestion de la classe CSS pour le thème sombre (darkly)
+    if (selected_theme == "darkly") {
+      addCssClass(selector = "body", class = "dark-mode-body")
+    } else {
+      removeCssClass(selector = "body", class = "dark-mode-body")
+    }
+    
+    # 3. FIX pour le thème cosmo: Rendre le navbar clair pour voir les logos
+    if (selected_theme == "cosmo") {
+      shinyjs::runjs("$('.navbar-default').addClass('cosmo-fix');")
+    } else {
+      shinyjs::runjs("$('.navbar-default').removeClass('cosmo-fix');")
+    }
+  })
+  
+  # Fonction pour appliquer le thème sélectionné sur tout le body
+  observeEvent(current_theme(), {
+    session$sendCustomMessage(type = 'set-theme', message = list(
+      theme = shinytheme(current_theme()),
+      selector = "body"
+    ))
+  })
+  
+  # Injecte un script JS pour gérer le changement de thème sur tout le body (nécessaire avec navbarPage)
+  tags$head(tags$script(HTML("
+    Shiny.setInputValue('theme_loaded', true, {priority: 'event'});
+    Shiny.addCustomMessageHandler('set-theme', function(message) {
+      $('body').attr('class', '');
+      $('body').addClass('container-fluid');
+      $('body').addClass(message.theme.name);
+    });
+  ")))
   
   # --- 1. Gestion de la connexion ---
   login_status <- reactiveVal(FALSE)
@@ -330,12 +430,11 @@ server <- function(input, output, session) {
     paste("Dernière mise à jour de l'API :", format(last_update_time(), "%Y-%m-%d %H:%M:%S"))
   })
   
-  # Jeu 1: Données pour tous les départements potentiellement sélectionnés
+  # Jeu 1: Données pour tous les départements (23, 19, 87)
   data_brute_all_deps <- eventReactive(list(data_trigger()), {
-    # Charge 23, 19, 87 par défaut, si un input sélectionne "all", on utilise ces données
     deps_to_load <- c("23", "19", "87")
     
-    df <- get_ademe_data_multi(departements = deps_to_load, size = 500, dataset = "dpe03existant")
+    df <- get_ademe_data_multi(departements = deps_to_load, size = 1500, dataset = "dpe03existant") 
     req(!is.null(df))
     if (nrow(df) > 0) {
       df$Departement <- paste("Département", df$code_departement_ban)
@@ -345,9 +444,9 @@ server <- function(input, output, session) {
   }, ignoreNULL = FALSE)
   
   # Jeu 2: Données multi-départements (pour la comparaison régionale)
-  data_brute_multi <- eventReactive(list(data_trigger(), input$dep_compare), {
-    deps <- unlist(strsplit(input$dep_compare, ";"))
-    df <- get_ademe_data_multi(departements = deps, size = 500, dataset = "dpe03existant")
+  data_brute_multi <- eventReactive(list(data_trigger(), input$dep_compare_a, input$dep_compare_b), {
+    deps <- unique(c(input$dep_compare_a, input$dep_compare_b))
+    df <- get_ademe_data_multi(departements = deps, size = 1500, dataset = "dpe03existant")
     req(!is.null(df))
     df <- df %>% mutate(
       Departement = paste("Département", code_departement_ban)
@@ -398,6 +497,9 @@ server <- function(input, output, session) {
     df <- data_brute_multi()
     req(nrow(df) > 0)
     
+    deps <- c(input$dep_compare_a, input$dep_compare_b)
+    df <- df %>% filter(code_departement_ban %in% deps)
+    
     # Prétraitement de la géolocalisation
     df <- df %>%
       mutate(
@@ -445,13 +547,25 @@ server <- function(input, output, session) {
       labs(title = paste("Distribution des émissions GES (", title_dep, ")"),
            x = "Émission GES (kg CO₂e/m²/an)",
            y = "Nombre d’observations") +
-      scale_x_continuous(limits = c(0, 300)) +
+      coord_cartesian(xlim = c(0, 300)) + 
       theme_minimal() +
       theme(plot.title = element_text(hjust = 0.5, face = "bold", size=14))
   })
   output$export_ges_png <- downloadHandler(
     filename = function() { paste("histogramme_ges-", Sys.Date(), ".png", sep="") },
-    content = function(file) { ggsave(file, plot = output$histogram_ges_freq, device = "png", width = 8, height = 6) }
+    content = function(file) { 
+      df <- filter_dep_analysis() %>% filter(emission_ges_chauffage > 0 & emission_ges_chauffage < 500)
+      title_dep <- if (input$dep_select_1 == "all") "Tous Départements" else paste("Département", unique(df$code_departement_ban))
+      p <- ggplot(df, aes(x = emission_ges_chauffage)) +
+        geom_histogram(binwidth = 10, fill = "#17a2b8", color = "white", alpha = 0.8) +
+        labs(title = paste("Distribution des émissions GES (", title_dep, ")"),
+             x = "Émission GES (kg CO₂e/m²/an)",
+             y = "Nombre d’observations") +
+        coord_cartesian(xlim = c(0, 300)) + 
+        theme_minimal() +
+        theme(plot.title = element_text(hjust = 0.5, face = "bold", size=14))
+      ggsave(file, plot = p, device = "png", width = 8, height = 6) 
+    }
   )
   
   # 4.3. Densité Conso par Type
@@ -467,9 +581,11 @@ server <- function(input, output, session) {
            x = "Consommation énergie primaire (kWh/m²/an)",
            y = "Densité",
            fill = "Type de bâtiment") +
-      scale_x_continuous(limits = c(0,500)) +
+      coord_cartesian(xlim = c(0,500)) + 
       theme_minimal() +
-      theme(legend.position = "bottom", plot.title = element_text(hjust=0.5, face="bold", size=14))
+      theme(legend.position = "bottom", plot.title = element_text(hjust=0.5, face="bold", size=14),
+            # Correction de l'origine (0,0)
+            panel.spacing = unit(c(0, 0, 0, 0), "cm")) 
   }
   output$density_conso_by_type <- renderPlot({ generate_density_conso_by_type(filter_dep_analysis()) })
   output$export_conso_type_png <- downloadHandler(
@@ -488,11 +604,11 @@ server <- function(input, output, session) {
                                    right = FALSE,
                                    include.lowest = TRUE)
       ) %>%
-      filter(!is.na(periode_construction), conso_5_usages_par_m2_ep < 1000)
+      filter(!is.na(periode_construction))
     
     if (type_plot == "box") {
       p <- ggplot(df2, aes(x = periode_construction, y = conso_5_usages_par_m2_ep, fill = periode_construction)) +
-        geom_boxplot(outlier.alpha = 0.1) +
+        geom_boxplot(outlier.shape = NA) + # Retire les outliers sur l'affichage
         labs(y = "Conso EP (kWh/m²/an)")
     } else {
       df_mean <- df2 %>% group_by(periode_construction) %>% 
@@ -503,7 +619,7 @@ server <- function(input, output, session) {
     }
     
     p + labs(title = "Consommation EP selon période de construction", x = "Période de construction") +
-      scale_y_continuous(limits = c(0,700)) +
+      coord_cartesian(ylim = c(0,700)) + 
       theme_minimal() +
       theme(axis.text.x = element_text(angle=45, hjust=1), legend.position = "none",
             plot.title = element_text(hjust=0.5, face="bold", size=14))
@@ -517,11 +633,20 @@ server <- function(input, output, session) {
   
   # 4.5. Bar Conso par Commune
   generate_bar_conso_by_commune <- function(df) {
-    df2 <- df %>% filter(!is.na(conso_5_usages_par_m2_ep), conso_5_usages_par_m2_ep < 800)
+    df2 <- df %>% filter(!is.na(conso_5_usages_par_m2_ep))
     
-    # Applique le filtre DPE et Conso de l'onglet IV (Multicritère)
+    # Correction de la logique du filtre DPE
+    if (length(input$dpe_filter) > 1 && "ABCDEFG" %in% input$dpe_filter) {
+      dpe_to_filter <- input$dpe_filter[input$dpe_filter != "ABCDEFG"] # Prend les lettres individuelles si "Toutes" est aussi coché
+    } else if ("ABCDEFG" %in% input$dpe_filter) {
+      dpe_to_filter <- LETTERS[1:7] # Prend toutes les lettres si "Toutes" est seul
+    } else {
+      dpe_to_filter <- input$dpe_filter # Prend les lettres sélectionnées (ou vide)
+    }
+    
+    # Applique les filtres DPE et Conso de l'onglet IV (Multicritère)
     df2 <- df2 %>% 
-      filter(etiquette_dpe %in% input$dpe_filter) %>%
+      filter(etiquette_dpe %in% dpe_to_filter) %>%
       filter(conso_5_usages_par_m2_ep >= input$conso_limit[1] & conso_5_usages_par_m2_ep <= input$conso_limit[2])
     
     df_comm <- df2 %>% 
@@ -546,18 +671,27 @@ server <- function(input, output, session) {
   
   # 4.6. Boxplot Conso par GES (Retrait des outliers)
   generate_boxplot_conso_by_ges <- function(df) {
-    df2 <- df %>% filter(!is.na(etiquette_ges), conso_5_usages_par_m2_ep < 800)
+    df2 <- df %>% filter(!is.na(etiquette_ges))
     
-    # Applique le filtre DPE et Conso de l'onglet IV (Multicritère)
+    # Correction de la logique du filtre DPE
+    if (length(input$dpe_filter) > 1 && "ABCDEFG" %in% input$dpe_filter) {
+      dpe_to_filter <- input$dpe_filter[input$dpe_filter != "ABCDEFG"]
+    } else if ("ABCDEFG" %in% input$dpe_filter) {
+      dpe_to_filter <- LETTERS[1:7]
+    } else {
+      dpe_to_filter <- input$dpe_filter
+    }
+    
+    # Applique les filtres DPE et Conso de l'onglet IV (Multicritère)
     df2 <- df2 %>% 
-      filter(etiquette_dpe %in% input$dpe_filter) %>%
+      filter(etiquette_dpe %in% dpe_to_filter) %>%
       filter(conso_5_usages_par_m2_ep >= input$conso_limit[1] & conso_5_usages_par_m2_ep <= input$conso_limit[2])
     
     ggplot(df2, aes(x = etiquette_ges, y = conso_5_usages_par_m2_ep, fill = etiquette_ges)) +
-      geom_boxplot(outlier.shape = NA) + # Retire les outliers
+      geom_boxplot(outlier.shape = NA) + # Retire les outliers sur l'affichage
       scale_fill_manual(values = ges_colors, drop = FALSE) +
-      labs(title="Consommation EP selon Étiquette GES", x="Étiquette GES", y="Conso EP (kWh/m²/an)") +
-      scale_y_continuous(limits = c(0,700)) +
+      labs(title="Distribution Consommation EP selon Étiquette GES", x="Étiquette GES", y="Conso EP (kWh/m²/an)") +
+      coord_cartesian(ylim = c(0,700)) + # Limite l'affichage pour la lisibilité
       theme_minimal() +
       theme(legend.position="none", plot.title = element_text(hjust=0.5, face="bold", size=14))
   }
@@ -569,11 +703,13 @@ server <- function(input, output, session) {
   
   # 4.7. Comparaison Régionale
   generate_comparison_dpe_regions <- function(df) {
-    ggplot(df, aes(x = etiquette_dpe, fill = etiquette_dpe)) +
+    df_filtered <- df %>% filter(code_departement_ban %in% c(input$dep_compare_a, input$dep_compare_b))
+    
+    ggplot(df_filtered, aes(x = etiquette_dpe, fill = etiquette_dpe)) +
       geom_bar(position="dodge", color="black") +
       facet_wrap(~ Departement, scales="free_y") +
       scale_fill_manual(values = dpe_colors, drop = FALSE) +
-      labs(title=paste("Répartition des étiquettes DPE : Comparaison", input$dep_compare),
+      labs(title=paste("Répartition des étiquettes DPE : Comparaison Dépt", input$dep_compare_a, "vs Dépt", input$dep_compare_b),
            x="Étiquette DPE", y="Nombre d’observations") +
       theme_minimal() +
       theme(legend.position="none", plot.title = element_text(hjust=0.5, face = "bold", size=14))
@@ -584,7 +720,7 @@ server <- function(input, output, session) {
     content = function(file) { ggsave(file, plot = generate_comparison_dpe_regions(data_clean_multi()), device = "png", width = 10, height = 6) }
   )
   
-  # --- 5. Corrélation et Régression (Correction de l'erreur "unused argument") ---
+  # --- 5. Corrélation et Régression ---
   
   correlation_plot_react <- eventReactive(input$calc_correlation, {
     # Filtre sur le(s) département(s) sélectionné(s) dans l'onglet III
@@ -600,6 +736,17 @@ server <- function(input, output, session) {
       select(!!x_var, !!y_var) %>% 
       filter(!is.na(!!x_var), !is.na(!!y_var))
     
+    # Calcul des quantiles (filtrage des 10% les plus extrêmes de chaque côté = 80% des données centrales)
+    x_lower_q <- quantile(df_plot[[input$cor_x]], 0.10, na.rm = TRUE)
+    x_upper_q <- quantile(df_plot[[input$cor_x]], 0.90, na.rm = TRUE)
+    y_lower_q <- quantile(df_plot[[input$cor_y]], 0.10, na.rm = TRUE)
+    y_upper_q <- quantile(df_plot[[input$cor_y]], 0.90, na.rm = TRUE)
+    
+    df_plot_filtered <- df_plot %>%
+      filter(!!x_var >= x_lower_q, !!x_var <= x_upper_q) %>%
+      filter(!!y_var >= y_lower_q, !!y_var <= y_upper_q)
+    
+    # Calcul de corrélation et de régression sur TOUTES les données (df_plot)
     cor_value <- cor(df_plot[[input$cor_x]], df_plot[[input$cor_y]], use = "complete.obs")
     lm_model <- lm(paste(input$cor_y, "~", input$cor_x), data = df_plot)
     r_squared <- summary(lm_model)$r.squared
@@ -610,13 +757,18 @@ server <- function(input, output, session) {
              " (Département(s) : ", paste(unique(deps), collapse = ", "), ")")
     })
     
-    p <- ggplot(df_plot, aes(x = !!x_var, y = !!y_var)) +
+    # Le graphique utilise les données filtrées (df_plot_filtered)
+    p <- ggplot(df_plot_filtered, aes(x = !!x_var, y = !!y_var)) +
       geom_point(alpha = 0.6, color = "#007bff") +
-      geom_smooth(method = "lm", se = TRUE, color = "#dc3545", fill = "#dc3545", alpha = 0.2) +
-      labs(title = paste("Corrélation :", input$cor_y, "vs", input$cor_x),
+      # La ligne de régression est tracée avec le modèle issu des données complètes (df_plot)
+      geom_smooth(method = "lm", se = TRUE, color = "#dc3545", fill = "#dc3545", alpha = 0.2, data = df_plot) +
+      labs(title = paste("Corrélation :", input$cor_y, "vs", input$cor_x, "(Affichage concentré sur 80% des données)"),
            x = input$cor_x,
            y = input$cor_y) +
       theme_light() +
+      # Ajustement explicite des axes pour encadrer les données affichées
+      coord_cartesian(xlim = c(min(df_plot_filtered[[input$cor_x]]), max(df_plot_filtered[[input$cor_x]])),
+                      ylim = c(min(df_plot_filtered[[input$cor_y]]), max(df_plot_filtered[[input$cor_y]]))) +
       theme(plot.title = element_text(hjust=0.5, face="bold", size=14))
     
     return(p)
@@ -674,18 +826,39 @@ server <- function(input, output, session) {
   
   # --- 7. Tableaux de Données Brutes et Exports CSV (Fusionnés) ---
   
-  data_raw_display <- reactive({
+  # UI conditionnel pour le choix du département dans l'onglet I
+  output$raw_dep_select_ui <- renderUI({
     if (input$raw_data_selector == "1dep") {
-      data_clean_base() %>% filter(code_departement_ban == input$dep_select_1) %>% select(-latitude, -longitude)
+      selectInput("raw_dep_select", "Département :",
+                  choices = c("Creuse (23)" = "23", "Corrèze (19)" = "19", "Haute-Vienne (87)" = "87"),
+                  selected = "23")
     } else {
-      data_clean_multi() %>% select(-latitude, -longitude)
+      NULL
+    }
+  })
+  
+  data_raw_display <- reactive({
+    df_base <- data_clean_base() 
+    req(nrow(df_base) > 0)
+    
+    # Filtre selon le choix de l'utilisateur
+    if (input$raw_data_selector == "1dep") {
+      req(input$raw_dep_select) 
+      df_base %>% filter(code_departement_ban == input$raw_dep_select) %>% select(-latitude, -longitude)
+    } else {
+      # Afficher tous les départements
+      df_base %>% select(-latitude, -longitude)
     }
   })
   
   output$table_ademe_raw <- renderDT({
     datatable(data_raw_display(), 
               options=list(pageLength=10, scrollX=TRUE), rownames=FALSE,
-              caption=paste("Source : ADEME DPE —", input$raw_data_selector))
+              caption=paste("Source : ADEME DPE —", 
+                            if (input$raw_data_selector == "1dep") 
+                              paste("Département", input$raw_dep_select) 
+                            else 
+                              "Tous départements confondus"))
   })
   
   output$export_raw_csv <- downloadHandler(
