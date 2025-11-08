@@ -1,22 +1,33 @@
+# --- APPLICATION SHINY DPE - VERSION INTÉGRALE ---
+
+# I. LIBRAIRIES NÉCESSAIRES
+# -------------------------
 library(shiny)
 library(httr)
 library(jsonlite)
 library(DT)
 library(ggplot2)
 library(dplyr)
+library(shinyjs)
+library(shinythemes)
+library(leaflet)
+library(shinyWidgets)
+library(rlang) # Nécessaire pour l'utilisation de sym() et !! dans ggplot
 
-# --- FONCTION DE RÉCUPÉRATION DES DONNÉES ---
-get_ademe_data_multi <- function(departements = c("23", "19"),
-                                 size = 500,
+
+# II. FONCTION DE RÉCUPÉRATION DES DONNÉES (ADEME)
+# -----------------------------------------------
+# Conservation des messages 'message()' pour le débogage et le suivi de l'API.
+get_ademe_data_multi <- function(departements = c("23", "19", "87"),
+                                 size = 1500,
                                  dataset = "dpe03existant") {
-  # dataset peut être "dpe03existant" (logements existants) ou un autre identifiant
   base_url <- "https://data.ademe.fr/data-fair/api/v1/datasets"
   full_url <- paste0(base_url, "/", dataset, "/lines")
   
-  # Force le type caractère
   departements <- as.character(departements)
   
-  # Construire filtre qs : code_departement_ban:("23" OR "19")
+  req(length(departements) > 0)
+  
   quoted <- paste0('"', departements, '"')
   qs_filter <- paste0("code_departement_ban:(", paste(quoted, collapse = " OR "), ")")
   
@@ -25,7 +36,7 @@ get_ademe_data_multi <- function(departements = c("23", "19"),
   params <- list(
     page = 1,
     size = size * length(departements),
-    select = "etiquette_dpe,emission_ges_chauffage,nom_commune_brut,code_departement_ban,surface_habitable_logement,conso_5_usages_par_m2_ep,type_batiment,annee_construction,etiquette_ges",
+    select = "etiquette_dpe,emission_ges_chauffage,nom_commune_brut,code_departement_ban,surface_habitable_logement,conso_5_usages_par_m2_ep,type_batiment,annee_construction,etiquette_ges,date_etablissement_dpe,_geopoint",
     qs = qs_filter
   )
   
@@ -40,14 +51,8 @@ get_ademe_data_multi <- function(departements = c("23", "19"),
     }
   )
   
-  if (is.null(response)) {
-    warning("Response is NULL")
-    return(NULL)
-  }
-  if (response$status_code != 200) {
-    warning("Échec requête API, status = ", response$status_code)
-    cont <- try(rawToChar(response$content), silent = TRUE)
-    message("DEBUG — contenu réponse = ", cont)
+  if (is.null(response) || response$status_code != 200) {
+    warning("Échec requête API, status = ", ifelse(is.null(response), "NULL", response$status_code))
     return(NULL)
   }
   
@@ -62,201 +67,509 @@ get_ademe_data_multi <- function(departements = c("23", "19"),
     }
   )
   
-  if (is.null(parsed)) {
-    warning("parsed JSON est NULL")
-    return(NULL)
-  }
-  
-  if (!"results" %in% names(parsed)) {
-    warning("Champ 'results' manquant dans le JSON")
+  if (is.null(parsed) || !"results" %in% names(parsed)) {
+    warning("Problème de parsing JSON ou champ 'results' manquant.")
     return(NULL)
   }
   
   return(parsed$results)
 }
 
-# --- UI ---
-ui <- navbarPage(
-  title = "Diagnostic de Performance Énergétique (DPE) – Départements sélectionnés",
+
+# III. INTERFACE UTILISATEUR (UI)
+# -------------------------------
+ui <- fluidPage(
+  # Le thème flatly est conservé pour la base Light Mode, mais le Dark Mode est géré par CSS.
+  theme = shinytheme("flatly"),
+  shinyjs::useShinyjs(),
   
+  # CSS pour un design sobre et la gestion du thème Noir/Blanc
   tags$head(
     tags$style(HTML("
-      body { font-family: 'Arial', sans-serif; background-color: #f8f9fa; }
-      .panel-title { background-color: #007bff; color: white; padding: 15px; margin-bottom: 20px; border-radius: 5px; font-weight: bold; font-size: 24px; }
-      .well { background-color: white; border: 1px solid #dee2e6; border-radius: 5px; padding: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
-      h4 { color: #004085; font-weight: bold; font-size: 1.35em; border-bottom: 2px solid #dee2e6; padding-bottom: 5px; margin-bottom: 15px; }
-    "))
+             /* Configuration générale Light Theme (flatly) */
+             .nav-tabs > li.active > a, .nav-tabs > li.active > a:focus, .nav-tabs > li.active > a:hover {
+                 background-color: #007bff !important;
+                 color: white !important;
+                 border-color: #007bff !important;
+             }
+             h4 { color: #007bff; font-weight: 600; font-size: 1.4em; border-bottom: 3px solid #007bff; padding-bottom: 5px; margin-bottom: 15px; }
+             .well { border: 1px solid #ced4da; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 25px; }
+             .btn-primary { background-color: #28a745; border-color: #28a745; }
+             .btn-primary:hover { background-color: #218838; border-color: #1e7e34; }
+             body { background-color: #f8f9fa; }
+
+             /* Styles Dark Mode (Noir) */
+             .dark-mode-body {
+                 background-color: #212529 !important; /* Presque noir */
+                 color: #f8f9fa !important; /* Écriture blanche pour le texte général */
+             }
+             .dark-mode-body .well {
+                 background-color: #343a40 !important; /* Panneaux sombres */
+                 color: #f8f9fa !important;
+                 border-color: #495057;
+             }
+             .dark-mode-body h4 {
+                 color: #17a2b8 !important; /* Titres clairs */
+                 border-bottom-color: #17a2b8 !important;
+             }
+             /* Rendre les inputs lisibles */
+             .dark-mode-body .form-control, .dark-mode-body .selectize-input {
+                 background-color: #495057 !important;
+                 color: #f8f9fa !important;
+                 border-color: #6c757d !important;
+             }
+             /* Rendre la navbar lisible (texte clair sur fond sombre) */
+             .dark-mode-body .navbar-default, .dark-mode-body .navbar-inverse {
+                 background-color: #212529 !important;
+                 border-color: #212529 !important;
+             }
+             .dark-mode-body .navbar-default .navbar-brand,
+             .dark-mode-body .navbar-default .nav > li > a,
+             .dark-mode-body .navbar-default .nav > li > a:hover {
+                 color: #f8f9fa !important;
+             }
+             /* FIX CRITIQUE : Texte des tableaux (DT) en blanc en mode sombre */
+             .dark-mode-body .dataTables_wrapper table,
+             .dark-mode-body .dataTables_wrapper th,
+             .dark-mode-body .dataTables_wrapper td,
+             .dark-mode-body .dataTables_wrapper .dataTables_length,
+             .dark-mode-body .dataTables_wrapper .dataTables_filter,
+             .dark-mode-body .dataTables_wrapper .dataTables_info,
+             .dark-mode-body .dataTables_wrapper .dataTables_processing,
+             .dark-mode-body .dataTables_wrapper .dataTables_paginate {
+                 color: #f8f9fa !important;
+             }
+             .dark-mode-body .dataTables_wrapper .paginate_button {
+                 color: #f8f9fa !important;
+                 background: #343a40 !important;
+                 border-color: #495057 !important;
+             }
+             .dark-mode-body .leaflet-container {
+                 filter: invert(90%) hue-rotate(180deg);
+             }
+         "))
   ),
   
-  tabPanel("Analyse DPE – Département unique",
-           fluidPage(
-             fluidRow(
-               column(6, wellPanel(h4("Répartition étiquettes DPE"), plotOutput("histogram_dpe"))),
-               column(6, wellPanel(h4("Émissions GES chauffage"), plotOutput("histogram_ges")))
-             ),
-             fluidRow(
-               column(6, wellPanel(h4("Conso EP vs Surface"), plotOutput("scatter_conso_surface"))),
-               column(6, wellPanel(h4("Conso : Maison vs Appartement"), plotOutput("density_conso_by_type")))
-             )
-           )
+  # 1. Écran de Connexion (Visible au départ)
+  div(
+    id = "login_page",
+    wellPanel(
+      style = "width: 400px; margin: 100px auto; padding: 30px;",
+      h3(icon("lock"), "Authentification Requise"),
+      textInput("userName", "Nom d'utilisateur:", value = ""),
+      passwordInput("password", "Mot de passe:", value = ""),
+      actionButton("loginButton", "Se connecter", class = "btn-primary"),
+      br(),
+      br(),
+      fluidRow(
+        column(6, align = "center",
+               tags$img(src = "https://www.univ-lyon2.fr/uas/ksup/LOGO_PIED_DE_PAGE/Footer_800px_281_marque-etat-logo-rouge.png",
+                        height = "80px", style = "margin-top: 20px;"),
+               tags$br()
+        ),
+        column(6, align = "center",
+               tags$img(src = "https://upload.wikimedia.org/wikipedia/fr/archive/7/77/20220206181136!Logo_enedis_header.png",
+                        height = "80px", style = "margin-top: 20px;")
+        )
+      )
+    )
   ),
-  tabPanel("Analyse Temporelle",
-           fluidPage(
-             fluidRow(
-               column(12, wellPanel(h4("Conso selon Période de Construction"), plotOutput("boxplot_dpe_annee")))
-             )
-           )
-  ),
-  tabPanel("Analyse Multicritère",
-           fluidPage(
-             fluidRow(
-               column(6, wellPanel(h4("Distribution DPE par type de bâtiment"), plotOutput("bar_dpe_by_type"))),
-               column(6, wellPanel(h4("Conso moyenne par commune"), plotOutput("bar_conso_by_commune")))
-             ),
-             fluidRow(
-               column(12, wellPanel(h4("Conso selon Étiquette GES"), plotOutput("boxplot_conso_by_ges")))
-             )
-           )
-  ),
-  tabPanel("Comparaison Régionale",
-           fluidPage(
-             fluidRow(
-               column(12, wellPanel(h4("Comparaison DPE : plusieurs départements"), plotOutput("comparison_dpe_regions")))
-             )
-           )
-  ),
-  tabPanel("Données Brutes",
-           fluidPage(
-             fluidRow(
-               column(12, wellPanel(h4("Tableau – Département unique"), DTOutput("table_ademe_1dep"))),
-               column(12, wellPanel(h4("Tableau – Multi‑Départements"), DTOutput("table_ademe_multi")))
-             )
-           )
-  )
-)
+  
+  # 2. Application Principale (Masquée au départ)
+  div(
+    id = "main_app",
+    style = "display: none;",
+    
+    navbarPage(
+      title = tags$span("DPE – Analyse",
+                        tags$img(src = "https://www.univ-lyon2.fr/uas/ksup/LOGO_PIED_DE_PAGE/Footer_800px_281_marque-etat-logo-rouge.png", height = "30px", style = "margin-left: 10px; margin-right: 5px;"),
+                        tags$img(src = "https://upload.wikimedia.org/wikipedia/fr/archive/7/77/20220206181136!Logo_enedis_header.png", height = "30px")
+      ),
+      id = "main_nav",
+      
+      # Contrôles dans le header
+      header = tagList(
+        div(class = "container-fluid",
+            fluidRow(
+              column(4,
+                     actionButton("refresh_data", "Rafraîchir les Données", icon = icon("sync-alt"), class = "btn-info")
+              ),
+              column(4, align = "center",
+                     actionButton("theme_toggle", "Thème Blanc/Noir", icon = icon("sun"), class = "btn-default")
+              ),
+              column(4, align = "right",
+                     div(style = "margin-top: 8px;", textOutput("last_update"))
+              )
+            ),
+            br()
+        )
+      ),
+      
+      # PAGE 1 : Contexte et Données Brutes
+      tabPanel("Contexte et Données Brutes",
+               fluidPage(
+                 wellPanel(
+                   h4("Contexte, Objectifs et Périmètre de l'Application"),
+                   tags$p("Cette application **interne** est dédiée à l'analyse des **Diagnostics de Performance Énergétique (DPE)** pour les départements de la **Creuse (23)**, de la **Corrèze (19)** et de la **Haute-Vienne (87)**, en partenariat avec l'**ADEME** et **Enedis**."),
+                   tags$p("Les données sont extraites de l'**API Data ADEME** (`dpe03existant`) et visent à appliquer des méthodes de **Science des Données (BUT SD)** pour identifier les tendances de consommation énergétique, les émissions de Gaz à Effet de Serre (GES) et leur lien avec les caractéristiques des logements."),
+                   tags$hr(),
+                   h4("Structure de l'Analyse"),
+                   tags$ul(
+                     tags$li("Analyse Unidimensionnelle et Temporelle : **Distributions** des émissions GES et impact de l'**année de construction** sur la consommation."),
+                     tags$li("Analyse Bi-variée et Géographique : Étude des **corrélations** entre variables numériques (e.g., Consommation vs. Émission GES) et **cartographie** interactive par étiquette DPE."),
+                     tags$li("Synthèse Multicritère : Classement des communes et analyse de la distribution de la consommation par **classe GES**.")
+                   )
+                 ),
+                 # TABLEAUX DE DONNÉES BRUTES
+                 wellPanel(
+                   h4("Tableaux de Données Brutes"),
+                   fluidRow(
+                     column(4,
+                            selectInput("raw_data_selector", "Afficher les données :",
+                                        choices = c("Tous départements confondus" = "all_deps", "Choix unique du département" = "1dep"),
+                                        selected = "all_deps")
+                     ),
+                     column(4, uiOutput("raw_dep_select_ui")
+                     ),
+                     column(4, style = "margin-top: 25px;",
+                            downloadButton("export_raw_csv", "Exporter CSV des données affichées")
+                     )
+                   ),
+                   DTOutput("table_ademe_raw")
+                 )
+               )
+      ),
+      
+      # PAGE 2 : Analyse Unidimensionnelle et Temporelle
+      tabPanel("Analyse Unidimensionnelle et Temporelle",
+               fluidPage(
+                 wellPanel(
+                   fluidRow(
+                     column(4,
+                            selectInput("dep_select_1", "Département à analyser :",
+                                        choices = c("Creuse (23)" = "23", "Corrèze (19)" = "19", "Haute-Vienne (87)" = "87", "Tous (23, 19, 87)" = "all"),
+                                        selected = "23")
+                     ),
+                     column(4,
+                            selectInput("type_bat_1", "Type de Bâtiment :",
+                                        choices = c("Tous" = "Tous", "Maison" = "maison", "Appartement" = "appartement"),
+                                        selected = "Tous")
+                     )
+                   )
+                 ),
+                 fluidRow(
+                   column(6, wellPanel(h4("Distribution des émissions de GES (Histogramme)"), plotOutput("histogram_ges_freq"), downloadButton("export_ges_png", "Exporter PNG"))),
+                   column(6, wellPanel(h4("Distribution des Émissions GES : Maison vs Appartement"), plotOutput("density_conso_by_type"), downloadButton("export_conso_type_png", "Exporter PNG")))
+                 ),
+                 fluidRow(
+                   column(12, wellPanel(
+                     fluidRow(
+                       column(12,
+                              h4("Consommation EP selon Période de Construction"),
+                              radioButtons("periode_type", "Métrique :",
+                                           choices = c("Moyenne (Barres)" = "bar", "Distribution (Boxplot)" = "box"),
+                                           selected = "bar", inline = TRUE)
+                       )
+                     ),
+                     plotOutput("boxplot_dpe_annee"),
+                     downloadButton("export_annee_png", "Exporter PNG")
+                   ))
+                 )
+               )
+      ),
+      
+      # PAGE 3 : Analyse Bi-variée et Géographique
+      tabPanel("Analyse Bi-variée et Géographique",
+               fluidPage(
+                 wellPanel(
+                   h4("Analyse de Corrélation et Régression Linéaire"),
+                   fluidRow(
+                     # Groupe X
+                     column(3, selectInput("cor_x", "Variable X (Numérique) :",
+                                           choices = c("Consommation EP" = "conso_5_usages_par_m2_ep", "Surface habitable" = "surface_habitable_logement",
+                                                       "Émission GES" = "emission_ges_chauffage", "Année de construction" = "annee_construction"))
+                     ),
+                     # Groupe Y
+                     column(3, selectInput("cor_y", "Variable Y (Numérique) :",
+                                           choices = c("Émission GES" = "emission_ges_chauffage", "Consommation EP" = "conso_5_usages_par_m2_ep",
+                                                       "Surface habitable" = "surface_habitable_logement", "Année de construction" = "annee_construction"),
+                                           selected = "conso_5_usages_par_m2_ep")
+                     ),
+                     # Groupe Département
+                     column(3, selectInput("cor_dep_select", "Département(s) pour la corrélation :",
+                                           choices = c("Creuse (23)" = "23", "Corrèze (19)" = "19", "Haute-Vienne (87)" = "87", "Tous (23, 19, 87)" = "all"),
+                                           selected = "23")
+                     ),
+                     column(3, style = "margin-top: 25px;",
+                            actionButton("calc_correlation", "Calculer & Afficher Corrélation", class = "btn-primary")
+                     )
+                   ),
+                   textOutput("correlation_text"),
+                   plotOutput("correlation_plot"),
+                   downloadButton("export_correlation_png", "Exporter PNG")
+                 ),
+                 wellPanel(
+                   h4("Analyse Géographique et Comparaison Régionale"),
+                   fluidRow(
+                     column(4,
+                            selectInput("dep_map_select", "Département pour la carte :",
+                                        choices = c("Creuse (23)" = "23", "Corrèze (19)" = "19", "Haute-Vienne (87)" = "87", "Tous (23, 19, 87)" = "all"),
+                                        selected = "23")
+                     ),
+                     # Mise à jour de la comparaison régionale : 2 selectInputs
+                     column(4,
+                            selectInput("dep_compare_a", "Comparaison Régionale : Département A",
+                                        choices = c("23", "19", "87"),
+                                        selected = "23")
+                     ),
+                     column(4,
+                            selectInput("dep_compare_b", "Comparaison Régionale : Département B",
+                                        choices = c("23", "19", "87"),
+                                        selected = "19")
+                     )
+                   ),
+                   fluidRow(
+                     column(6, wellPanel(h4("Cartographie des DPE"), leafletOutput("dpe_map", height = 450))),
+                     column(6, wellPanel(h4("Comparaison Statistique des DPE"), plotOutput("comparison_dpe_regions"), downloadButton("export_regions_png", "Exporter PNG")))
+                   )
+                 )
+               )
+      ),
+      
+      # PAGE 4 : Synthèse Multicritère
+      tabPanel("Synthèse Multicritère",
+               fluidPage(
+                 wellPanel(
+                   fluidRow(
+                     column(6,
+                            sliderInput("conso_limit", "Limiter la Conso EP (kWh/m²/an) :",
+                                        min = 0, max = 800, value = c(0, 800), step = 50)
+                     )
+                   )
+                 ),
+                 fluidRow(
+                   column(6, wellPanel(h4("Top 10 Consommation moyenne par commune"), plotOutput("bar_conso_by_commune"), downloadButton("export_commune_png", "Exporter PNG"))),
+                   column(6, wellPanel(h4("Distribution Consommation selon Étiquette GES"), plotOutput("boxplot_conso_by_ges"), downloadButton("export_ges_boxplot_png", "Exporter PNG")))
+                 )
+               )
+      )
+    ) # Fin navbarPage
+  ) # Fin div main_app
+) # Fin fluidPage
 
-# --- Serveur ---
+
+# IV. SERVEUR (LOGIQUE DE L'APPLICATION)
+# --------------------------------------
 server <- function(input, output, session) {
   
-  # Données pour un seul département (ex : 23)
-  data_brute_1dep <- reactive({
-    df <- get_ademe_data_multi(departements = c("23"), size = 500, dataset = "dpe03existant")
-    req(!is.null(df))
-    if (nrow(df) > 0) {
-      df$Departement <- "Département 23"
+  # 0. Gestion du Thème (Noir/Blanc)
+  theme_dark <- reactiveVal(FALSE)
+  
+  observeEvent(input$theme_toggle, {
+    theme_dark(!theme_dark())
+    
+    if (theme_dark()) {
+      shinyjs::addClass(selector = "body", class = "dark-mode-body")
+      updateActionButton(session, "theme_toggle", label = "Thème Noir/Blanc", icon = icon("moon"))
+    } else {
+      shinyjs::removeClass(selector = "body", class = "dark-mode-body")
+      updateActionButton(session, "theme_toggle", label = "Thème Noir/Blanc", icon = icon("sun"))
     }
-    df
   })
   
-  data_clean_1dep <- reactive({
-    df <- data_brute_1dep()
-    req(nrow(df) > 0)
-    df %>% 
+  # 1. Gestion de la connexion
+  login_status <- reactiveVal(FALSE)
+  
+  observeEvent(input$loginButton, {
+    if (input$userName == "admin" && input$password == "admin") {
+      login_status(TRUE)
+      shinyjs::hide("login_page")
+      shinyjs::show("main_app")
+    } else {
+      output$loginMessage <- renderText({"Nom d'utilisateur ou mot de passe incorrect."})
+    }
+  })
+  
+  # 2. Gestion du rafraîchissement et des données brutes
+  last_update_time <- reactiveVal(Sys.time())
+  data_trigger <- reactiveVal(0)
+  
+  observeEvent(input$refresh_data, {
+    data_trigger(data_trigger() + 1)
+  })
+  
+  output$last_update <- renderText({
+    paste("Dernière mise à jour de l'API :", format(last_update_time(), "%Y-%m-%d %H:%M:%S"))
+  })
+  
+  # Jeu 1: Données pour tous les départements (23, 19, 87)
+  data_brute_all_deps <- eventReactive(list(data_trigger()), {
+    deps_to_load <- c("23", "19", "87")
+    
+    df <- get_ademe_data_multi(departements = deps_to_load, size = 1500, dataset = "dpe03existant")
+    req(!is.null(df))
+    if (nrow(df) > 0) {
+      df$Departement <- paste("Département", df$code_departement_ban)
+    }
+    last_update_time(Sys.time())
+    df
+  }, ignoreNULL = FALSE)
+  
+  # Jeu 2: Données multi-départements (pour la comparaison régionale)
+  data_brute_multi <- eventReactive(list(data_trigger(), input$dep_compare_a, input$dep_compare_b), {
+    deps <- unique(c(input$dep_compare_a, input$dep_compare_b))
+    df <- get_ademe_data_multi(departements = deps, size = 1500, dataset = "dpe03existant")
+    req(!is.null(df))
+    df <- df %>% mutate(
+      Departement = paste("Département", code_departement_ban)
+    )
+    df
+  }, ignoreNULL = FALSE)
+  
+  # 3. Nettoyage et Filtrage des Données
+  data_clean_base <- reactive({
+    df_raw <- data_brute_all_deps()
+    req(nrow(df_raw) > 0)
+    
+    # Prétraitement de la géolocalisation
+    df <- df_raw %>%
       mutate(
-        emission_ges_chauffage = as.numeric(emission_ges_chauffage),
-        surface_habitable_logement = as.numeric(surface_habitable_logement),
-        conso_5_usages_par_m2_ep = as.numeric(conso_5_usages_par_m2_ep),
-        annee_construction = as.numeric(annee_construction),
+        latitude = as.numeric(sapply(strsplit(`_geopoint`, ","), `[`, 1)),
+        longitude = as.numeric(sapply(strsplit(`_geopoint`, ","), `[`, 2))
+      )
+    
+    df_clean <- df %>%
+      mutate(
+        across(c(emission_ges_chauffage, surface_habitable_logement, conso_5_usages_par_m2_ep, annee_construction), as.numeric),
         etiquette_dpe = factor(etiquette_dpe, levels = LETTERS[1:7]),
         etiquette_ges = factor(etiquette_ges, levels = LETTERS[1:7])
       ) %>%
       filter(!is.na(etiquette_dpe))
+    
+    return(df_clean)
   })
   
-  # Données multi‐départements (ex : 23, 19)
-  data_brute_multi <- reactive({
-    df <- get_ademe_data_multi(departements = c("23", "19"), size = 500, dataset = "dpe03existant")
-    req(!is.null(df))
-    df <- df %>% mutate(
-      Departement = ifelse(code_departement_ban == "23", "Département 23", "Département 19")
-    )
-    df
+  # Filtrage pour l'ANALYSE UNIDIMENSIONNELLE (Onglet II)
+  filter_dep_analysis <- reactive({
+    df <- data_clean_base()
+    
+    deps <- if (input$dep_select_1 == "all") c("23", "19", "87") else input$dep_select_1
+    df <- df %>% filter(code_departement_ban %in% deps)
+    
+    if (input$type_bat_1 != "Tous") {
+      df <- df %>% filter(type_batiment == input$type_bat_1)
+    }
+    return(df)
   })
   
+  # Nettoyage du jeu multi-dép (pour la comparaison régionale)
   data_clean_multi <- reactive({
     df <- data_brute_multi()
     req(nrow(df) > 0)
-    df %>% 
+    
+    deps <- c(input$dep_compare_a, input$dep_compare_b)
+    df <- df %>% filter(code_departement_ban %in% deps)
+    
+    # Prétraitement de la géolocalisation
+    df <- df %>%
       mutate(
-        emission_ges_chauffage = as.numeric(emission_ges_chauffage),
-        surface_habitable_logement = as.numeric(surface_habitable_logement),
-        conso_5_usages_par_m2_ep = as.numeric(conso_5_usages_par_m2_ep),
-        annee_construction = as.numeric(annee_construction),
+        latitude = as.numeric(sapply(strsplit(`_geopoint`, ","), `[`, 1)),
+        longitude = as.numeric(sapply(strsplit(`_geopoint`, ","), `[`, 2))
+      )
+    
+    df %>%
+      mutate(
+        across(c(emission_ges_chauffage, surface_habitable_logement, conso_5_usages_par_m2_ep, annee_construction), as.numeric),
         etiquette_dpe = factor(etiquette_dpe, levels = LETTERS[1:7]),
         etiquette_ges = factor(etiquette_ges, levels = LETTERS[1:7])
       ) %>%
       filter(!is.na(etiquette_dpe))
   })
   
-  # --- Graphiques / Tableaux ---
+  # 4. Fonctions de Génération des Graphiques
+  dpe_colors <- c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000")
+  ges_colors <- dpe_colors
   
-  output$histogram_ges <- renderPlot({
-    df <- data_clean_1dep()
-    req(nrow(df) > 0)
-    df2 <- df %>% filter(emission_ges_chauffage > 0 & emission_ges_chauffage < 500)
-    ggplot(df2, aes(x = emission_ges_chauffage)) +
-      geom_histogram(binwidth = 5, fill = "#17a2b8", color = "white", alpha = 0.8) +
-      labs(title = "Distribution des émissions GES Chauffage",
+  # Fonction pour appliquer le thème aux graphiques (pour ggplot2)
+  get_custom_theme <- reactive({
+    if (theme_dark()) {
+      theme_minimal(base_size = 12) +
+        theme(
+          plot.background = element_rect(fill = "#343a40", color = "#343a40"),
+          panel.background = element_rect(fill = "#343a40", color = "#343a40"),
+          text = element_text(color = "#f8f9fa"),
+          title = element_text(color = "#17a2b8"),
+          axis.text = element_text(color = "#f8f9fa"),
+          axis.title = element_text(color = "#f8f9fa"),
+          legend.background = element_rect(fill = "#343a40", color = "#343a40"),
+          legend.text = element_text(color = "#f8f9fa"),
+          legend.title = element_text(color = "#f8f9fa"),
+          panel.grid.major = element_line(color = "#495057"),
+          panel.grid.minor = element_line(color = "#495057"),
+          plot.title = element_text(hjust = 0.5, face = "bold", size=14)
+        )
+    } else {
+      theme_minimal(base_size = 12) +
+        theme(plot.title = element_text(hjust = 0.5, face = "bold", size=14))
+    }
+  })
+  
+  # 4.2. Distribution GES (Histogramme de fréquences)
+  output$histogram_ges_freq <- renderPlot({
+    df <- filter_dep_analysis() %>% filter(emission_ges_chauffage > 0 & emission_ges_chauffage < 500)
+    title_dep <- if (input$dep_select_1 == "all") "Tous Départements" else paste("Département", unique(df$code_departement_ban))
+    ggplot(df, aes(x = emission_ges_chauffage)) +
+      geom_histogram(binwidth = 10, fill = "#17a2b8", color = "white", alpha = 0.8) +
+      labs(title = paste("Distribution des émissions GES (", title_dep, ")"),
            x = "Émission GES (kg CO₂e/m²/an)",
            y = "Nombre d’observations") +
-      theme_minimal() +
-      theme(plot.title = element_text(hjust = 0.5, face = "bold", size=16))
+      coord_cartesian(xlim = c(0, 300)) +
+      get_custom_theme()
   })
+  output$export_ges_png <- downloadHandler(
+    filename = function() { paste("histogramme_ges-", Sys.Date(), ".png", sep="") },
+    content = function(file) {
+      df <- filter_dep_analysis() %>% filter(emission_ges_chauffage > 0 & emission_ges_chauffage < 500)
+      title_dep <- if (input$dep_select_1 == "all") "Tous Départements" else paste("Département", unique(df$code_departement_ban))
+      p <- ggplot(df, aes(x = emission_ges_chauffage)) +
+        geom_histogram(binwidth = 10, fill = "#17a2b8", color = "white", alpha = 0.8) +
+        labs(title = paste("Distribution des émissions GES (", title_dep, ")"),
+             x = "Émission GES (kg CO₂e/m²/an)",
+             y = "Nombre d’observations") +
+        coord_cartesian(xlim = c(0, 300)) +
+        get_custom_theme()
+      ggsave(file, plot = p, device = "png", width = 8, height = 6)
+    }
+  )
   
-  output$histogram_dpe <- renderPlot({
-    df <- data_clean_1dep()
-    req(nrow(df) > 0)
-    dpe_colors <- c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000")
-    ggplot(df, aes(x = etiquette_dpe, fill = etiquette_dpe)) +
-      geom_bar(color = "black") +
-      scale_fill_manual(values = dpe_colors, drop = FALSE) +
-      labs(title = "Répartition des étiquettes DPE", x = "Étiquette DPE", y = "Nombre") +
-      theme_minimal() +
-      theme(legend.position = "none",
-            plot.title = element_text(hjust = 0.5, face = "bold", size=16))
-  })
-  
-  output$scatter_conso_surface <- renderPlot({
-    df <- data_clean_1dep()
-    req(nrow(df) > 0)
-    df2 <- df %>% filter(!is.na(surface_habitable_logement),
-                         !is.na(conso_5_usages_par_m2_ep),
-                         conso_5_usages_par_m2_ep < 800)
-    ggplot(df2, aes(x = surface_habitable_logement,
-                    y = conso_5_usages_par_m2_ep,
-                    color = etiquette_dpe)) +
-      geom_point(alpha = 0.6) +
-      geom_smooth(method = "lm", se = FALSE, color = "black", linetype="dashed") +
-      scale_color_manual(values = c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000"),
-                         name = "Étiquette DPE") +
-      labs(title = "Consommation EP vs Surface",
-           x = "Surface habitable (m²)",
-           y = "Consommation énergie primaire (kWh/m²/an)") +
-      theme_light() +
-      theme(plot.title = element_text(hjust=0.5, face="bold", size=16))
-  })
-  
-  output$density_conso_by_type <- renderPlot({
-    df <- data_clean_1dep()
-    req(nrow(df) > 0)
+  # 4.3. Densité GES par Type
+  generate_density_ges_by_type <- function(df) {
     df2 <- df %>% filter(type_batiment %in% c("maison", "appartement"),
-                         conso_5_usages_par_m2_ep < 800)
-    ggplot(df2, aes(x = conso_5_usages_par_m2_ep, fill = type_batiment)) +
+                         emission_ges_chauffage >= 0,
+                         emission_ges_chauffage < 200)
+    title_dep <- if (input$dep_select_1 == "all") "Tous Départements" else paste("Département", unique(df$code_departement_ban))
+    
+    ggplot(df2, aes(x = emission_ges_chauffage, fill = type_batiment)) +
       geom_density(alpha = 0.6, adjust=1.5) +
       scale_fill_manual(values = c("maison"="#e76f51", "appartement"="#2a9d8f")) +
-      labs(title = "Distribution de la consommation : Maison vs Appartement",
-           x = "Consommation énergie primaire (kWh/m²/an)",
+      labs(title = paste("Distribution des Émissions GES : Maison vs Appartement (", title_dep, ")"),
+           x = "Émission GES (kg CO₂e/m²/an)",
            y = "Densité",
            fill = "Type de bâtiment") +
-      scale_x_continuous(limits = c(0,500)) +
-      theme_minimal() +
-      theme(legend.position = "bottom",
-            plot.title = element_text(hjust=0.5, face="bold", size=16))
-  })
+      scale_x_continuous(expand = c(0, 0)) +
+      scale_y_continuous(expand = c(0, 0)) +
+      coord_cartesian(xlim = c(0,200)) +
+      get_custom_theme() +
+      theme(legend.position = "bottom")
+  }
+  output$density_conso_by_type <- renderPlot({ generate_density_ges_by_type(filter_dep_analysis()) })
+  output$export_conso_type_png <- downloadHandler(
+    filename = function() { paste("density_ges_type-", Sys.Date(), ".png", sep="") },
+    content = function(file) { ggsave(file, plot = generate_density_ges_by_type(filter_dep_analysis()), device = "png", width = 8, height = 6) }
+  )
   
-  output$boxplot_dpe_annee <- renderPlot({
-    df <- data_clean_1dep()
-    req(nrow(df) > 0)
+  # 4.4. Conso par Année (Boxplot / Barres)
+  generate_boxplot_dpe_annee <- function(df, type_plot) {
     df2 <- df %>% filter(!is.na(annee_construction), annee_construction >= 1900)
     df2 <- df2 %>%
       mutate(
@@ -266,94 +579,251 @@ server <- function(input, output, session) {
                                    right = FALSE,
                                    include.lowest = TRUE)
       ) %>%
-      filter(!is.na(periode_construction),
-             conso_5_usages_par_m2_ep < 1000)
-    ggplot(df2, aes(x = periode_construction, y = conso_5_usages_par_m2_ep, fill = periode_construction)) +
-      geom_boxplot(outlier.alpha = 0.1) +
-      labs(title = "Consommation EP selon période de construction",
-           x = "Période de construction",
-           y = "Consommation énergie primaire (kWh/m²/an)") +
-      scale_y_continuous(limits = c(0,700)) +
-      theme_minimal() +
-      theme(axis.text.x = element_text(angle=45, hjust=1),
-            legend.position = "none",
-            plot.title = element_text(hjust=0.5, face="bold", size=16))
-  })
+      filter(!is.na(periode_construction))
+    
+    if (type_plot == "box") {
+      p <- ggplot(df2, aes(x = periode_construction, y = conso_5_usages_par_m2_ep, fill = periode_construction)) +
+        geom_boxplot(outlier.shape = NA) +
+        labs(y = "Conso EP (kWh/m²/an)")
+    } else {
+      df_mean <- df2 %>% group_by(periode_construction) %>%
+        summarise(conso_moy = mean(conso_5_usages_par_m2_ep, na.rm=TRUE), .groups="drop")
+      p <- ggplot(df_mean, aes(x = periode_construction, y = conso_moy, fill = periode_construction)) +
+        geom_col(color="black") +
+        labs(y = "Conso EP Moyenne (kWh/m²/an)")
+    }
+    
+    p + labs(title = "Consommation EP selon période de construction", x = "Période de construction") +
+      coord_cartesian(ylim = c(0,700)) +
+      get_custom_theme() +
+      theme(axis.text.x = element_text(angle=45, hjust=1), legend.position = "none")
+  }
   
-  output$bar_dpe_by_type <- renderPlot({
-    df <- data_clean_1dep()
-    req(nrow(df) > 0)
-    df2 <- df %>% filter(type_batiment %in% c("maison", "appartement"))
-    dpe_colors <- c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000")
-    ggplot(df2, aes(x = etiquette_dpe, fill = etiquette_dpe)) +
-      geom_bar(position = "fill", color="black") +
-      facet_wrap(~ type_batiment) +
-      scale_fill_manual(values = dpe_colors, drop = FALSE) +
-      labs(title = "Distribution DPE par type de bâtiment", x = "Étiquette DPE", y = "Proportion") +
-      theme_minimal() +
-      theme(plot.title = element_text(hjust=0.5, face="bold", size=16))
-  })
+  output$boxplot_dpe_annee <- renderPlot({ generate_boxplot_dpe_annee(filter_dep_analysis(), input$periode_type) })
+  output$export_annee_png <- downloadHandler(
+    filename = function() { paste("conso_annee-", Sys.Date(), ".png", sep="") },
+    content = function(file) { ggsave(file, plot = generate_boxplot_dpe_annee(filter_dep_analysis(), input$periode_type), device = "png", width = 10, height = 7) }
+  )
   
-  output$bar_conso_by_commune <- renderPlot({
-    df <- data_clean_1dep()
-    req(nrow(df) > 0)
-    df2 <- df %>% filter(!is.na(conso_5_usages_par_m2_ep), conso_5_usages_par_m2_ep < 800)
-    df_comm <- df2 %>% 
+  # 4.5. Bar Conso par Commune
+  generate_bar_conso_by_commune <- function(df) {
+    df2 <- df %>% filter(!is.na(conso_5_usages_par_m2_ep))
+    
+    df2 <- df2 %>%
+      filter(conso_5_usages_par_m2_ep >= input$conso_limit[1] & conso_5_usages_par_m2_ep <= input$conso_limit[2])
+    
+    df_comm <- df2 %>%
       group_by(nom_commune_brut) %>%
       summarise(conso_moy = mean(conso_5_usages_par_m2_ep, na.rm=TRUE), .groups="drop") %>%
       arrange(desc(conso_moy)) %>%
       slice_head(n=10)
+    
     ggplot(df_comm, aes(x = reorder(nom_commune_brut, conso_moy), y = conso_moy, fill = conso_moy)) +
       geom_col() +
       scale_fill_gradient(low="#b2e067", high="#e76f51", name="Conso Moy.") +
       labs(title="Top 10 communes les plus énergivores", x="Commune", y="Conso EP moyenne (kWh/m²/an)") +
       coord_flip() +
-      theme_minimal() +
-      theme(legend.position="none", plot.title = element_text(hjust=0.5, face="bold", size=16))
-  })
+      get_custom_theme() +
+      theme(legend.position="none")
+  }
+  output$bar_conso_by_commune <- renderPlot({ generate_bar_conso_by_commune(filter_dep_analysis()) })
+  output$export_commune_png <- downloadHandler(
+    filename = function() { paste("bar_conso_commune-", Sys.Date(), ".png", sep="") },
+    content = function(file) { ggsave(file, plot = generate_bar_conso_by_commune(filter_dep_analysis()), device = "png", width = 8, height = 6) }
+  )
   
-  output$boxplot_conso_by_ges <- renderPlot({
-    df <- data_clean_1dep()
-    req(nrow(df) > 0)
-    df2 <- df %>% filter(!is.na(etiquette_ges), conso_5_usages_par_m2_ep < 800)
-    ges_colors <- c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000")
+  # 4.6. Boxplot Conso par GES (Retrait des outliers)
+  generate_boxplot_conso_by_ges <- function(df) {
+    df2 <- df %>% filter(!is.na(etiquette_ges))
+    
+    df2 <- df2 %>%
+      filter(conso_5_usages_par_m2_ep >= input$conso_limit[1] & conso_5_usages_par_m2_ep <= input$conso_limit[2])
+    
     ggplot(df2, aes(x = etiquette_ges, y = conso_5_usages_par_m2_ep, fill = etiquette_ges)) +
-      geom_boxplot(outlier.alpha = 0.1) +
+      geom_boxplot(outlier.shape = NA) +
       scale_fill_manual(values = ges_colors, drop = FALSE) +
-      labs(title="Consommation EP selon Étiquette GES", x="Étiquette GES", y="Conso EP (kWh/m²/an)") +
-      scale_y_continuous(limits = c(0,700)) +
-      theme_minimal() +
-      theme(legend.position="none", plot.title = element_text(hjust=0.5, face="bold", size=16))
-  })
+      labs(title="Distribution Consommation EP selon Étiquette GES", x="Étiquette GES", y="Conso EP (kWh/m²/an)") +
+      coord_cartesian(ylim = c(0,700)) +
+      get_custom_theme() +
+      theme(legend.position="none")
+  }
+  output$boxplot_conso_by_ges <- renderPlot({ generate_boxplot_conso_by_ges(filter_dep_analysis()) })
+  output$export_ges_boxplot_png <- downloadHandler(
+    filename = function() { paste("boxplot_conso_ges-", Sys.Date(), ".png", sep="") },
+    content = function(file) { ggsave(file, plot = generate_boxplot_conso_by_ges(filter_dep_analysis()), device = "png", width = 8, height = 6) }
+  )
   
-  output$comparison_dpe_regions <- renderPlot({
-    df <- data_clean_multi()
-    req(nrow(df) > 0)
-    dpe_colors <- c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000")
-    ggplot(df, aes(x = etiquette_dpe, fill = etiquette_dpe)) +
+  # 4.7. Comparaison Régionale
+  generate_comparison_dpe_regions <- function(df) {
+    df_filtered <- df %>% filter(code_departement_ban %in% c(input$dep_compare_a, input$dep_compare_b))
+    
+    ggplot(df_filtered, aes(x = etiquette_dpe, fill = etiquette_dpe)) +
       geom_bar(position="dodge", color="black") +
       facet_wrap(~ Departement, scales="free_y") +
       scale_fill_manual(values = dpe_colors, drop = FALSE) +
-      labs(title="Répartition des étiquettes DPE : comparaison départements",
+      labs(title=paste("Répartition des étiquettes DPE : Comparaison Dépt", input$dep_compare_a, "vs Dépt", input$dep_compare_b),
            x="Étiquette DPE", y="Nombre d’observations") +
-      theme_minimal() +
-      theme(legend.position="none", plot.title = element_text(hjust=0.5, face="bold", size=16))
+      get_custom_theme() +
+      theme(legend.position="none")
+  }
+  output$comparison_dpe_regions <- renderPlot({ generate_comparison_dpe_regions(data_clean_multi()) })
+  output$export_regions_png <- downloadHandler(
+    filename = function() { paste("comparison_dpe_regions-", Sys.Date(), ".png", sep="") },
+    content = function(file) { ggsave(file, plot = generate_comparison_dpe_regions(data_clean_multi()), device = "png", width = 10, height = 6) }
+  )
+  
+  # 5. Corrélation et Régression
+  correlation_plot_react <- eventReactive(input$calc_correlation, {
+    deps <- if (input$cor_dep_select == "all") c("23", "19", "87") else input$cor_dep_select
+    df <- data_clean_base() %>% filter(code_departement_ban %in% deps)
+    
+    x_var <- sym(input$cor_x)
+    y_var <- sym(input$cor_y)
+    
+    df_plot <- df %>%
+      select(!!x_var, !!y_var) %>%
+      filter(!is.na(!!x_var), !is.na(!!y_var))
+    
+    # Arrête l'exécution si le jeu de données pour la corrélation est vide (évite les warnings)
+    req(nrow(df_plot) > 0)
+    
+    # Calcul des quantiles (filtrage des 80% des données centrales)
+    x_lower_q <- quantile(df_plot[[input$cor_x]], 0.10, na.rm = TRUE)
+    x_upper_q <- quantile(df_plot[[input$cor_x]], 0.90, na.rm = TRUE)
+    y_lower_q <- quantile(df_plot[[input$cor_y]], 0.10, na.rm = TRUE)
+    y_upper_q <- quantile(df_plot[[input$cor_y]], 0.90, na.rm = TRUE)
+    
+    df_plot_filtered <- df_plot %>%
+      filter(!!x_var >= x_lower_q, !!x_var <= x_upper_q) %>%
+      filter(!!y_var >= y_lower_q, !!y_var <= y_upper_q)
+    
+    # Calcul de corrélation et de régression sur TOUTES les données (df_plot)
+    cor_value <- cor(df_plot[[input$cor_x]], df_plot[[input$cor_y]], use = "complete.obs")
+    lm_model <- lm(paste(input$cor_y, "~", input$cor_x), data = df_plot)
+    r_squared <- summary(lm_model)$r.squared
+    
+    output$correlation_text <- renderText({
+      paste0("Coefficient de Corrélation de Pearson (R) : ", round(cor_value, 3),
+             " | R-carré de la Régression : ", round(r_squared, 3),
+             " (Département(s) : ", paste(unique(deps), collapse = ", "), ")")
+    })
+    
+    p <- ggplot(df_plot_filtered, aes(x = !!x_var, y = !!y_var)) +
+      geom_point(alpha = 0.6, color = "#007bff") +
+      geom_smooth(method = "lm", se = TRUE, color = "#dc3545", fill = "#dc3545", alpha = 0.2, data = df_plot) +
+      labs(title = paste("Corrélation :", input$cor_y, "vs", input$cor_x, "(Affichage concentré sur 80% des données)"),
+           x = input$cor_x,
+           y = input$cor_y) +
+      theme_light() +
+      coord_cartesian(xlim = c(min(df_plot_filtered[[input$cor_x]]), max(df_plot_filtered[[input$cor_x]])),
+                      ylim = c(min(df_plot_filtered[[input$cor_y]]), max(df_plot_filtered[[input$cor_y]]))) +
+      get_custom_theme()
+    
+    return(p)
   })
   
-  output$table_ademe_1dep <- renderDT({
-    df <- data_brute_1dep()
+  output$correlation_plot <- renderPlot({ correlation_plot_react() })
+  output$export_correlation_png <- downloadHandler(
+    filename = function() { paste("correlation_plot-", Sys.Date(), ".png", sep="") },
+    content = function(file) {
+      p <- correlation_plot_react()
+      ggsave(file, plot = p, device = "png", width = 10, height = 7)
+    }
+  )
+  
+  # 6. Cartographie Interactive (Leaflet)
+  output$dpe_map <- renderLeaflet({
+    
+    deps <- if (input$dep_map_select == "all") c("23", "19", "87") else input$dep_map_select
+    
+    df <- data_clean_base() %>% filter(code_departement_ban %in% deps)
     req(nrow(df) > 0)
-    datatable(df, options=list(pageLength=10, scrollX=TRUE), rownames=FALSE,
-              caption="Source : ADEME DPE – Dépt seul")
+    
+    df_map <- df %>%
+      filter(!is.na(latitude), !is.na(longitude), latitude > 0, longitude > -10)
+    
+    req(nrow(df_map) > 0)
+    
+    center_lng = mean(df_map$longitude, na.rm=TRUE)
+    center_lat = mean(df_map$latitude, na.rm=TRUE)
+    zoom_level = if (length(deps) > 1) 7 else 8
+    
+    pal <- colorFactor(palette = dpe_colors, domain = LETTERS[1:7], ordered = TRUE)
+    
+    leaflet(df_map) %>% addProviderTiles(providers$CartoDB.Positron) %>%
+      setView(lng = center_lng, lat = center_lat, zoom = zoom_level) %>%
+      addCircleMarkers(
+        lng = ~longitude,
+        lat = ~latitude,
+        radius = 4,
+        color = ~pal(etiquette_dpe),
+        stroke = TRUE,
+        weight = 1,
+        fillOpacity = 0.8,
+        popup = ~paste(
+          "<b>DPE :</b> ", etiquette_dpe, "<br>",
+          "<b>Dépt :</b> ", code_departement_ban, "<br>",
+          "<b>Commune :</b> ", nom_commune_brut, "<br>",
+          "<b>Émission GES :</b> ", round(emission_ges_chauffage, 1), " kgCO₂e/m²/an"
+        )
+      ) %>%
+      addLegend(pal = pal, values = LETTERS[1:7], opacity = 1, title = "Étiquette DPE")
   })
   
-  output$table_ademe_multi <- renderDT({
-    df <- data_brute_multi()
-    req(nrow(df) > 0)
-    datatable(df, options=list(pageLength=10, scrollX=TRUE), rownames=FALSE,
-              caption="Source : ADEME DPE – Multi dép.")
+  # 7. Tableaux de Données Brutes et Exports CSV (Fusionnés)
+  output$raw_dep_select_ui <- renderUI({
+    if (input$raw_data_selector == "1dep") {
+      selectInput("raw_dep_select", "Département :",
+                  choices = c("Creuse (23)" = "23", "Corrèze (19)" = "19", "Haute-Vienne (87)" = "87"),
+                  selected = "23")
+    } else {
+      NULL
+    }
   })
+  
+  data_raw_display <- reactive({
+    df_base <- data_clean_base()
+    req(nrow(df_base) > 0)
+    
+    if (input$raw_data_selector == "1dep") {
+      req(input$raw_dep_select)
+      df_base %>% filter(code_departement_ban == input$raw_dep_select) %>% select(-latitude, -longitude)
+    } else {
+      df_base %>% select(-latitude, -longitude)
+    }
+  })
+  
+  output$table_ademe_raw <- renderDT({
+    datatable_options <- list(pageLength=10, scrollX=TRUE)
+    
+    if (theme_dark()) {
+      datatable_options <- c(datatable_options,
+                             list(dom = 'lfrtip', class = 'display compact cell-border hover',
+                                  initComplete = JS(
+                                    "function(settings, json) {",
+                                    "$(this.api().table().container()).css({'background-color': '#343a40', 'color': '#f8f9fa'});",
+                                    "}")))
+    } else {
+      datatable_options <- c(datatable_options,
+                             list(dom = 'lfrtip', class = 'display compact cell-border hover'))
+    }
+    
+    datatable(data_raw_display(),
+              options=datatable_options, rownames=FALSE,
+              caption=paste("Source : ADEME DPE —",
+                            if (input$raw_data_selector == "1dep")
+                              paste("Département", input$raw_dep_select)
+                            else
+                              "Tous départements confondus"))
+  })
+  
+  output$export_raw_csv <- downloadHandler(
+    filename = function() { paste("ademe_dpe_export-", input$raw_data_selector, "-", Sys.Date(), ".csv", sep="") },
+    content = function(file) { write.csv(data_raw_display(), file, row.names = FALSE) }
+  )
 }
 
-# --- Lancer l’app ---
+
+# V. LANCER L'APPLICATION
+# -----------------------
 shinyApp(ui=ui, server=server)
