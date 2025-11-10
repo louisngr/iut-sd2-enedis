@@ -1,6 +1,6 @@
-# 📘 Documentation Fonctionnelle – Application DPE ADEME
+# Documentation Fonctionnelle – Application DPE ADEME
 
-## 1. 🎯 Objectif de l’application
+## 1. Objectif de l’application
 
 L’application a pour but d’analyser et de visualiser les **performances énergétiques** des bâtiments à partir des données publiques de l’**ADEME**.\
 Elle permet aux utilisateurs (étudiants, chercheurs, collectivités) de : - Explorer les données DPE locales,\
@@ -10,7 +10,7 @@ Elle permet aux utilisateurs (étudiants, chercheurs, collectivités) de : - Exp
 
 ------------------------------------------------------------------------
 
-## 2. 🔐 Authentification
+## 2. Authentification
 
 L’accès est restreint :\
 **Nom d’utilisateur :** `admin`\
@@ -20,9 +20,9 @@ L’accès est restreint :\
 
 ------------------------------------------------------------------------
 
-## 3. 🧭 Structure fonctionnelle de l’application
+## 3. Structure fonctionnelle de l’application
 
-### 🏠 Page 1 — Contexte et Données Brutes
+### Page 1 — Contexte et Données Brutes
 
 -   Présente le **contexte du projet** et la **source ADEME**.\
 -   Permet d’afficher et d’exporter les **données brutes** :
@@ -32,7 +32,7 @@ L’accès est restreint :\
 
 ------------------------------------------------------------------------
 
-### 📊 Page 2 — Analyse Unidimensionnelle et Temporelle
+### Page 2 — Analyse Unidimensionnelle et Temporelle
 
 -   Visualisation de la **distribution des émissions GES** (histogramme).\
 -   Comparaison **Maisons vs Appartements** (densités).\
@@ -42,7 +42,7 @@ L’accès est restreint :\
 
 ------------------------------------------------------------------------
 
-### 🔍 Page 3 — Analyse Bi-variée et Géographique
+### Page 3 — Analyse Bi-variée et Géographique
 
 -   Analyse de **corrélation et régression linéaire** entre deux variables numériques.\
 -   Affichage du **coefficient de corrélation (R)** et du **R²**.\
@@ -53,7 +53,7 @@ L’accès est restreint :\
 
 ------------------------------------------------------------------------
 
-### 🧩 Page 4 — Synthèse Multicritère
+### Page 4 — Synthèse Multicritère
 
 -   Classement **Top 10 des communes** les plus énergivores.\
 -   Analyse de la **consommation par étiquette GES** (boxplot).\
@@ -61,7 +61,7 @@ L’accès est restreint :\
 
 ------------------------------------------------------------------------
 
-## 4. ⚙️ Fonctionnalités transversales
+## 4. Fonctionnalités transversales
 
 | Fonctionnalité | Description |
 |----|----|
@@ -73,7 +73,7 @@ L’accès est restreint :\
 
 ------------------------------------------------------------------------
 
-## 5. 💡 Intérêt et valeur ajoutée
+## 5. Intérêt et valeur ajoutée
 
 -   Application **clé en main** pour explorer les performances énergétiques à l’échelle locale.\
 -   Permet de **croiser indicateurs énergétiques et territoriaux**.\
@@ -82,15 +82,15 @@ L’accès est restreint :\
 
 ------------------------------------------------------------------------
 
-## 6. 🗂️ Données et sources
+## 6. Données et sources
 
 -   **Source principale :** ADEME – Dataset *dpe03existant*\
-    🔗 <https://data.ademe.fr/>\
+      <https://data.ademe.fr/>\
 -   Données dynamiques, rafraîchies à chaque lancement ou sur demande utilisateur.
 
 ------------------------------------------------------------------------
 
-## 7. 🧾 Résumé des pages
+## 7. Résumé des pages
 
 | Page | Nom | Fonction principale |
 |----|----|----|
