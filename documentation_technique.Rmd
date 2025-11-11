@@ -1,0 +1,81 @@
+---
+title: "Documentation technique — Greentech Solutions (DPE)"
+author: "Équipe Greentech Solutions"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: false
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Objectif
+Manuel technique court expliquant comment installer, exécuter et maintenir l'application Shiny **DPE**. Contenu orienté développeur / mainteneur.
+
+# Prérequis
+- R >= 4.0
+- RStudio recommandé
+- Compte [shinyapps.io] pour le déploiement (optionnel)
+- Outils : Git, GitHub Desktop (ou équivalent), navigateur web
+
+# Packages R nécessaires
+Installer les packages suivants si absents :
+```r
+install.packages(c("shiny","httr","jsonlite","DT","ggplot2","dplyr",
+                   "shinyjs","shinythemes","leaflet","shinyWidgets","rlang"))
+```
+
+# Structure du dépôt
+```
+/ (racine du repo)
+├─ app/                      # code source Shiny (ui.R / server.R ou app.R)
+├─ data/                     # exports CSV (dpe_data.csv) pour tests locaux
+├─ docs/                     # rapports, documentation (Rmd -> HTML)
+├─ www/                      # images, logos utilisés par l'app
+├─ README.md
+└─ scripts/                  # scripts utilitaires (extraction, pré‑traitement)
+```
+
+# Fichier principal
+- `app/app.R` (ou `app/ui.R` + `app/server.R`) : point d'entrée.  
+  - UI : définition des onglets, contrôles utilisateur, CSS personnalisé.  
+  - Server : logique de récupération API (`get_ademe_data_multi`), nettoyage, génération de graphiques et export.
+
+# Flux de données / logique
+1. **Récupération** : `get_ademe_data_multi()` interroge l'API ADEME (`dpe03existant`) via `httr::GET`.  
+2. **Parsing** : `jsonlite::fromJSON()` transforme la réponse en dataframe.  
+3. **Nettoyage** : typage numérique (`as.numeric`), extraction `_geopoint` → `latitude`/`longitude`, filtrage des `NA`.  
+4. **Analyse** : création de jeux nettoyés (1 dép / multi‑dep), calcul KPI, agrégations par commune.  
+5. **Visualisation** : graphiques `ggplot2`, carte `leaflet`, tableaux `DT`.  
+6. **Export** : boutons `downloadHandler()` pour PNG et CSV.  
+7. **Déploiement** : `rsconnect::deployApp()` ou via shinyapps.io.
+
+# Paramètres et configuration
+- Fichier de test local : `data/dpe_data.csv` (même schéma que l'API).  
+- Variables importantes : `code_departement_ban`, `type_batiment`, `etiquette_dpe`, `conso_5_usages_par_m2_ep`, `_geopoint`.  
+- Timeout API : adapter `httr::GET(..., timeout(20))` si nécessaire.
+
+# Déploiement (shinyapps.io)
+1. Créer un compte sur https://www.shinyapps.io/ et installer `rsconnect`.  
+2. Configurer le compte : `rsconnect::setAccountInfo(name='...', token='...', secret='...')`.  
+3. Déployer : depuis RStudio `rsconnect::deployApp('app')` ou via l'interface.
+
+# Bonnes pratiques et maintenance
+- **Versionner** tout le code (commits fréquents, README clair).  
+- **Commentaires** : documenter fonctions clés (`get_ademe_data_multi`, génération de figures).  
+- **Tests locaux** : maintenir un `data/dpe_data_sample.csv` pour tests hors API.  
+- **Sécurité** : ne pas committer tokens ou mots de passe (utiliser `.Renviron`).  
+- **Monitoring** : suivre les erreurs API (logs), mettre en place des messages d'erreur utilisateur clairs.
+
+# Points d'attention connus
+- L'API ADEME peut limiter la taille des requêtes ; prévoir pagination ou réduction du `size`.  
+- `_geopoint` parfois mal formé → ajouter contrôles `is.na()` et `suppressWarnings(as.numeric(...))`.  
+- Valeurs extrêmes pour `conso_5_usages_par_m2_ep` : filtrer/purger avant visualisation.
+
+# Contacts & ressources
+- Répertoire du projet : `iut_sd2_rshiny_enedis` (GitHub).  
+- API ADEME : https://data.ademe.fr  
+- Guide RShiny : https://shiny.posit.co/r/getstarted/

@@ -1,0 +1,73 @@
+---
+title: "Documentation fonctionnelle — Greentech Solutions (DPE)"
+author: "Équipe Greentech Solutions"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: false
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Objet
+Manuel d'utilisation rapide expliquant les onglets et fonctionnalités disponibles dans l'application Shiny DPE.
+
+# Accès & Authentification
+- Page de connexion : nom d'utilisateur et mot de passe (ex. `admin`/`admin`) pour l'instant en local.  
+- Après authentification, l'application principale apparaît.
+
+# Menu principal (onglets)
+1. **Contexte et Données Brutes**  
+   - Présentation du projet, périmètre (dépts 23, 19, 87).  
+   - Tableaux interactifs (DT) : affichage "Tous départements" ou "Département unique".  
+   - Export CSV des données filtrées.
+
+2. **Analyse Unidimensionnelle et Temporelle**  
+   - Histogramme des émissions GES (avec option d'export PNG).  
+   - Densité/Distribution Maison vs Appartement.  
+   - Analyse par période de construction (barres ou boxplot) avec contrôle `radioButtons`.
+
+3. **Analyse Bi‑variée et Géographique**  
+   - Sélection X / Y pour corrélation et régression simple (action "Calculer & Afficher Corrélation").  
+   - Affichage du coefficient de corrélation et du R².  
+   - Carte interactive (Leaflet) affichant points colorés par étiquette DPE.  
+   - Comparaison régionale entre deux départements (facette ggplot).
+
+4. **Synthèse Multicritère**  
+   - Slider pour limiter l'intervalle de consommation (kWh/m²/an).  
+   - Top 10 communes par consommation moyenne.  
+   - Boxplot consommation par étiquette GES.  
+   - Exports PNG disponibles.
+
+# Contrôles utilisateur importants
+- **Sélection départementale** : choix d'un département unique ou de "Tous".  
+- **Type de bâtiment** : filtrage sur "Maison", "Appartement" ou "Tous".  
+- **Période / métrique** : choix entre moyenne (barres) ou distribution (boxplot).  
+- **Filtres globaux** : slider `conso_limit` pour exclure outliers visuels.  
+- **Boutons** : `Rafraîchir les Données` pour re‑interroger l'API ; `Thème Blanc/Noir` active le dark mode.
+
+# Export & partage
+- PNG : chaque figure principale propose un bouton d'export PNG.  
+- CSV : export du tableau affiché (brute ou filtré).  
+- Déploiement possible sur shinyapps.io (URL publique ou privée selon réglages).
+
+# Workflow utilisateur recommandé
+1. Se connecter → Vérifier la mise à jour (`Dernière mise à jour de l'API`).  
+2. Onglet "Contexte" → consulter la table des données pour vérifier la qualité.  
+3. Onglet "Analyse Unidimensionnelle" → explorer distributions et périodes.  
+4. Onglet "Bi‑variée" → tester corrélations et cartographie pour repérer zones sensibles.  
+5. Onglet "Synthèse" → générer exports pour restitution.
+
+# Limites fonctionnelles
+- Authentification basique (prototype) : prévoir intégration `shinymanager` pour production.  
+- Rafraîchissement des données dépend de l'API ADEME (latence / quotas).  
+- Certaines fonctionnalités (exports, thème) impactent l'affichage côté client sur mobiles.
+
+# Aide & support
+- Lire le README du dépôt pour instructions d'installation.  
+- Contacter le chef de projet / développeur référent (mentionner ici le nom et mail).  
+- Pour problèmes API : vérifier la disponibilité de `https://data.ademe.fr`.
+
