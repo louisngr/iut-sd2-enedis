@@ -57,13 +57,13 @@ Le cycle de vie des données suit une chaîne réactive :
 
 | Prérequis | Détail |
 |----|----|
-| **Logiciel R** | Version 4.0 ou ultérieure recommandée. |
-| **IDE** | RStudio (fortement recommandé). |
-| **Code Source** | Le script intégral doit être enregistré sous le nom `app.R` dans un répertoire de travail. |
+| **Logiciel R** | Dernière version de préférence |
+| **IDE** | RStudio (recommandé). |
+| **Code Source** | Le script intégral doit être enregistré dans un répertoire de travail. |
 
 #### Étapes d'installation locale :
 
-1.  Ouvrir **R** ou **RStudio**.\
+1.  Ouvrir **RStudio**.\
 2.  Installer les packages nécessaires via la commande :
 
 \`\`\`r install.packages(c( "shiny", "httr", "jsonlite", "DT", "ggplot2", "dplyr", "shinyjs", "shinythemes", "leaflet", "shinyWidgets", "rlang" ))
