@@ -1,5 +1,4 @@
-# --- APPLICATION SHINY DPE - VERSION INTÉGRALE ---
-
+# --- APPLICATION SHINY DPE - VERSION INTÉGRALE AVEC AMÉLIORATIONS ESTHÉTIQUES ---
 # I. LIBRAIRIES NÉCESSAIRES
 # -------------------------
 library(shiny)
@@ -97,6 +96,44 @@ ui <- fluidPage(
              .btn-primary { background-color: #28a745; border-color: #28a745; }
              .btn-primary:hover { background-color: #218838; border-color: #1e7e34; }
              body { background-color: #f8f9fa; }
+             /* Styles pour les boxes de statistiques */
+             .stat-box {
+                 background-color: #fff;
+                 border: 1px solid #dee2e6;
+                 border-radius: 15px; /* Coins arrondis */
+                 padding: 15px;
+                 margin-bottom: 20px;
+                 text-align: center;
+                 height: 120px; /* Hauteur ajustée pour l'icône et le texte */
+                 display: flex; /* Utilisation de flexbox pour l'alignement vertical */
+                 flex-direction: column;
+                 justify-content: center;
+                 align-items: center;
+                 box-shadow: 0 4px 8px rgba(0,0,0,0.1); /* Ombre plus prononcée */
+             }
+             .stat-value {
+                 font-size: 2.2em;
+                 font-weight: 700;
+                 color: #007bff; /* Bleu principal */
+                 margin-bottom: 5px;
+             }
+             .stat-label {
+                 font-size: 0.9em;
+                 color: #6c757d;
+             }
+             .stat-icon {
+                 font-size: 1.8em; /* Taille de l'icône */
+                 color: #007bff; /* Couleur de l'icône */
+                 margin-bottom: 8px;
+             }
+             /* Case bleu spécial pour Total */
+             .stat-box.blue {
+                 background-color: #007bff;
+                 color: white;
+             }
+             .stat-box.blue .stat-value, .stat-box.blue .stat-label, .stat-box.blue .stat-icon {
+                 color: white !important;
+             }
 
              /* Styles Dark Mode (Noir) */
              .dark-mode-body {
@@ -147,7 +184,27 @@ ui <- fluidPage(
              .dark-mode-body .leaflet-container {
                  filter: invert(90%) hue-rotate(180deg);
              }
-         "))
+             /* Stat Boxes Dark Mode */
+             .dark-mode-body .stat-box {
+                 background-color: #343a40;
+                 border-color: #495057;
+             }
+             .dark-mode-body .stat-value {
+                 color: #17a2b8 !important; /* Couleur claire en mode sombre */
+             }
+             .dark-mode-body .stat-label {
+                 color: #adb5bd !important;
+             }
+             .dark-mode-body .stat-icon {
+                 color: #17a2b8 !important; /* Icône aussi en clair */
+             }
+             .dark-mode-body .stat-box.blue {
+                 background-color: #17a2b8; /* Bleu clair pour le mode sombre */
+             }
+             .dark-mode-body .stat-box.blue .stat-value, .dark-mode-body .stat-box.blue .stat-label, .dark-mode-body .stat-box.blue .stat-icon {
+                 color: white !important;
+             }
+           "))
   ),
   
   # 1. Écran de Connexion (Visible au départ)
@@ -208,16 +265,23 @@ ui <- fluidPage(
       # PAGE 1 : Contexte et Données Brutes
       tabPanel("Contexte et Données Brutes",
                fluidPage(
+                 # STATISTIQUES GÉNÉRALES AVEC ÉMOTICÔNES ET COINS ARRONDIS
+                 fluidRow(
+                   column(3, div(class = "stat-box blue", tags$span(icon("chart-pie", class="stat-icon"), textOutput("stat_total_dpe"), class = "stat-value"), tags$p("Nombre total de DPE", class = "stat-label"))),
+                   column(3, div(class = "stat-box", tags$span(icon("plug", class="stat-icon"), textOutput("stat_conso_moy"), class = "stat-value"), tags$p("Conso EP Moyenne (kWh/m²/an)", class = "stat-label"))),
+                   column(3, div(class = "stat-box", tags$span(icon("cloud", class="stat-icon"), textOutput("stat_ges_moy"), class = "stat-value"), tags$p("Émissions GES Moyennes (kgCO₂e/m²/an)", class = "stat-label"))),
+                   column(3, div(class = "stat-box", tags$span(icon("home", class="stat-icon"), textOutput("stat_surface_moy"), class = "stat-value"), tags$p("Surface Habitable Moyenne (m²)", class = "stat-label")))
+                 ),
                  wellPanel(
                    h4("Contexte, Objectifs et Périmètre de l'Application"),
-                   tags$p("Cette application **interne** est dédiée à l'analyse des **Diagnostics de Performance Énergétique (DPE)** pour les départements de la **Creuse (23)**, de la **Corrèze (19)** et de la **Haute-Vienne (87)**, en partenariat avec l'**ADEME** et **Enedis**."),
-                   tags$p("Les données sont extraites de l'**API Data ADEME** (`dpe03existant`) et visent à appliquer des méthodes de **Science des Données (BUT SD)** pour identifier les tendances de consommation énergétique, les émissions de Gaz à Effet de Serre (GES) et leur lien avec les caractéristiques des logements."),
+                   tags$p("Cette application interne est dédiée à l'analyse des Diagnostics de Performance Énergétique (DPE) pour les départements de la Creuse (23), de la Corrèze (19) et de la Haute-Vienne (87), en partenariat avec l'ADEME et Enedis."),
+                   tags$p("Les données sont extraites de l'API Data ADEME (dpe03existant) et visent à appliquer des méthodes de Science des Données (BUT SD) pour identifier les tendances de consommation énergétique, les émissions de Gaz à Effet de Serre (GES) et leur lien avec les caractéristiques des logements."),
                    tags$hr(),
                    h4("Structure de l'Analyse"),
                    tags$ul(
-                     tags$li("Analyse Unidimensionnelle et Temporelle : **Distributions** des émissions GES et impact de l'**année de construction** sur la consommation."),
-                     tags$li("Analyse Bi-variée et Géographique : Étude des **corrélations** entre variables numériques (e.g., Consommation vs. Émission GES) et **cartographie** interactive par étiquette DPE."),
-                     tags$li("Synthèse Multicritère : Classement des communes et analyse de la distribution de la consommation par **classe GES**.")
+                     tags$li("Analyse Unidimensionnelle et Temporelle : Distributions des émissions GES et impact de l'année de construction sur la consommation."),
+                     tags$li("Analyse Bi-variée et Géographique : Étude des corrélations entre variables numériques (e.g., Consommation vs. Émission GES) et cartographie interactive par étiquette DPE."),
+                     tags$li("Synthèse Multicritère : Classement des communes et analyse de la distribution de la consommation par classe GES.")
                    )
                  ),
                  # TABLEAUX DE DONNÉES BRUTES
@@ -448,6 +512,30 @@ server <- function(input, output, session) {
     
     return(df_clean)
   })
+  
+  # Calcul des Statistiques Générales
+  calculate_general_stats <- reactive({
+    df <- data_clean_base()
+    req(nrow(df) > 0)
+    
+    n_dpe <- nrow(df)
+    conso_moy <- mean(df$conso_5_usages_par_m2_ep, na.rm = TRUE)
+    ges_moy <- mean(df$emission_ges_chauffage, na.rm = TRUE)
+    surface_moy <- mean(df$surface_habitable_logement, na.rm = TRUE)
+    
+    list(
+      n_dpe = format(n_dpe, big.mark = " ", scientific = FALSE),
+      conso_moy = paste(round(conso_moy, 1)),
+      ges_moy = paste(round(ges_moy, 1)),
+      surface_moy = paste(round(surface_moy, 1))
+    )
+  })
+  
+  # Affichage des Statistiques Générales
+  output$stat_total_dpe <- renderText({ calculate_general_stats()$n_dpe })
+  output$stat_conso_moy <- renderText({ calculate_general_stats()$conso_moy })
+  output$stat_ges_moy <- renderText({ calculate_general_stats()$ges_moy })
+  output$stat_surface_moy <- renderText({ calculate_general_stats()$surface_moy })
   
   # Filtrage pour l'ANALYSE UNIDIMENSIONNELLE (Onglet II)
   filter_dep_analysis <- reactive({
