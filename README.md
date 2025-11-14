@@ -27,8 +27,8 @@ L'accès à l'interface principale est protégé :
 
 | Champ             | Valeur  |
 |:------------------|:--------|
-| Nom d'utilisateur | `admin` |
-| Mot de passe      | `admin` |
+| Nom d'utilisateur | admin |
+| Mot de passe      | admin |
 
 ------------------------------------------------------------------------
 
@@ -36,7 +36,7 @@ L'accès à l'interface principale est protégé :
 
 ## 1. Vue d'ensemble
 
-L'interface est organisée autour d'un `navbarPage` comprenant quatre onglets d'analyse :
+L'interface est organisée autour d'un **barre de navigation** comprenant quatre onglets d'analyse :
 
 | Page | Nom de l'Onglet | Contenu de l'Analyse |
 |:----------|:-----------------------|:------------------------------------|
