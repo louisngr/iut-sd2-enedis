@@ -274,8 +274,8 @@ ui <- fluidPage(
                  ),
                  wellPanel(
                    h4("Contexte, Objectifs et Périmètre de l'Application"),
-                   tags$p("Cette application interne est dédiée à l'analyse des Diagnostics de Performance Énergétique (DPE) pour les départements de la Creuse (23), de la Corrèze (19) et de la Haute-Vienne (87), en partenariat avec l'ADEME et Enedis."),
-                   tags$p("Les données sont extraites de l'API Data ADEME (dpe03existant) et visent à appliquer des méthodes de Science des Données (BUT SD) pour identifier les tendances de consommation énergétique, les émissions de Gaz à Effet de Serre (GES) et leur lien avec les caractéristiques des logements."),
+                   tags$p("Cette application  est dédiée à l'analyse des Diagnostics de Performance Énergétique (DPE) pour les départements de la Creuse (23), de la Corrèze (19) et de la Haute-Vienne (87)."),
+                   tags$p("Les données sont extraites de l'API Data ADEME (dpe03existant) et visent à réaliser des graphiques et ressortir des tendances pour identifier les consommations énergétiques, les émissions de Gaz à Effet de Serre (GES) et leur lien avec les caractéristiques des logements."),
                    tags$hr(),
                    h4("Structure de l'Analyse"),
                    tags$ul(
@@ -609,7 +609,7 @@ server <- function(input, output, session) {
     ggplot(df, aes(x = emission_ges_chauffage)) +
       geom_histogram(binwidth = 10, fill = "#17a2b8", color = "white", alpha = 0.8) +
       labs(title = paste("Distribution des émissions GES (", title_dep, ")"),
-           x = "Émission GES (kg CO₂e/m²/an)",
+           x = "Émission GES (kg CO2/m2/an)",
            y = "Nombre d’observations") +
       coord_cartesian(xlim = c(0, 300)) +
       get_custom_theme()
@@ -622,7 +622,7 @@ server <- function(input, output, session) {
       p <- ggplot(df, aes(x = emission_ges_chauffage)) +
         geom_histogram(binwidth = 10, fill = "#17a2b8", color = "white", alpha = 0.8) +
         labs(title = paste("Distribution des émissions GES (", title_dep, ")"),
-             x = "Émission GES (kg CO₂e/m²/an)",
+             x = "Émission GES (kg CO2/m2/an",
              y = "Nombre d’observations") +
         coord_cartesian(xlim = c(0, 300)) +
         get_custom_theme()
@@ -641,7 +641,7 @@ server <- function(input, output, session) {
       geom_density(alpha = 0.6, adjust=1.5) +
       scale_fill_manual(values = c("maison"="#e76f51", "appartement"="#2a9d8f")) +
       labs(title = paste("Distribution des Émissions GES : Maison vs Appartement (", title_dep, ")"),
-           x = "Émission GES (kg CO₂e/m²/an)",
+           x = "Émission GES (kg CO2/m2/an)",
            y = "Densité",
            fill = "Type de bâtiment") +
       scale_x_continuous(expand = c(0, 0)) +
@@ -678,7 +678,7 @@ server <- function(input, output, session) {
         summarise(conso_moy = mean(conso_5_usages_par_m2_ep, na.rm=TRUE), .groups="drop")
       p <- ggplot(df_mean, aes(x = periode_construction, y = conso_moy, fill = periode_construction)) +
         geom_col(color="black") +
-        labs(y = "Conso EP Moyenne (kWh/m²/an)")
+        labs(y = "Conso EP Moyenne (kWh/m2/an)")
     }
     
     p + labs(title = "Consommation EP selon période de construction", x = "Période de construction") +
