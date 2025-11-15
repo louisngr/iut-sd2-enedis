@@ -22,15 +22,14 @@ library(scales)
 ```
 
 # Introduction
-
-La transition énergétique et la maîtrise de la consommation des logements sont des enjeux majeurs face aux défis climatiques et à la hausse des coûts de l'énergie.  
-Ce rapport, réalisé dans le cadre du projet *Greentech Solutions*, vise à étudier l'association entre la **classe DPE** (Diagnostic de Performance Énergétique) et la **consommation d'énergie primaire** (kWh/m²/an) sur trois départements du massif central : **Creuse (23)**, **Corrèze (19)** et **Haute‑Vienne (87)**.  
+  
+Ce rapport, réalisé dans le cadre du projet Rshiny, vise à étudier l'association entre la **classe DPE** (Diagnostic de Performance Énergétique) et la **consommation d'énergie primaire** (kWh/m²/an) sur trois départements du massif central : **Creuse (23)**, **Corrèze (19)** et **Haute‑Vienne (87)**.  
 
 L'approche adoptée est **exploratoire et comparative** : après présentation et préparation des données, nous produisons quelques indicateurs synthétiques (KPI) et trois visualisations ciblées permettant de répondre à la problématique principale — *dans quelle mesure la classe DPE et le type de bâtiment expliquent-ils la variabilité de la consommation ?* — en soulignant les limites méthodologiques.
 
 # Méthodologie et données
 
-**Source des données** : jeux DPE fournis par l'API ADEME (jeu `dpe03existant`) et pré‑traités via l'application Shiny de l'équipe. Pour exécuter ce rapport localement, placez un fichier `dpe_data.csv` dans le même dossier que ce `.Rmd` (export depuis l'application Shiny ou extraction via l'API ADEME).  
+**Source des données** : jeux DPE fournis par l'API ADEME (jeu `dpe03existant`) et pré‑traités via l'application Shiny de l'équipe. Pour exécuter ce rapport localement, on extrait directement les données via l'API ADEME.  
 
 **Variables principales utilisées** :
 - `code_departement_ban` : code du département (23, 19, 87)  
@@ -45,36 +44,69 @@ L'approche adoptée est **exploratoire et comparative** : après présentation e
 **Prétraitement** : typage numérique des variables pertinentes, retrait des valeurs absentes/non valides sur la consommation, création éventuelle d'agrégats par commune et découpage temporel par période de construction.
 
 ```{r data_prep}
-# Chargement des données : priorité au fichier local 'dpe_data.csv'
-if (file.exists("dpe_data.csv")) {
-  donnees <- read_csv("dpe_data.csv", show_col_types = FALSE)
-} else {
-  stop("Fichier 'dpe_data.csv' absent. Exportez les données depuis l'app Shiny ou placez le CSV ici.")
+# ---- Fonction API ADEME ----
+
+get_ademe_data_multi <- function(departements = c("23", "19", "87"),
+                                 size = 1500,
+                                 dataset = "dpe03existant") {
+
+  base_url <- "https://data.ademe.fr/data-fair/api/v1/datasets"
+  full_url <- paste0(base_url, "/", dataset, "/lines")
+
+  departements <- as.character(departements)
+  quoted <- paste0('"', departements, '"')
+  qs_filter <- paste0("code_departement_ban:(",
+                      paste(quoted, collapse = " OR "), ")")
+
+  params <- list(
+    page = 1,
+    size = size * length(departements),
+    select = "etiquette_dpe,nom_commune_brut,code_departement_ban,
+              surface_habitable_logement,conso_5_usages_par_m2_ep,
+              type_batiment,annee_construction,etiquette_ges,_geopoint",
+    qs = qs_filter
+  )
+
+  url <- httr::modify_url(full_url, query = params)
+
+  response <- tryCatch(
+    httr::GET(url, timeout(20)),
+    error = function(e) return(NULL)
+  )
+
+  if (is.null(response) || response$status_code != 200) {
+    message("Erreur API ADEME (statut: ", response$status_code, ").")
+    return(NULL)
+  }
+
+  parsed <- tryCatch(
+    jsonlite::fromJSON(rawToChar(response$content)),
+    error = function(e) return(NULL)
+  )
+
+  if (is.null(parsed) || !"results" %in% names(parsed)) {
+    return(NULL)
+  }
+
+  return(parsed$results)
 }
 
-# Paramètres : parsing des départements
-deps <- strsplit(params$departements, ",")[[1]] %>% trimws()
+departements <- unlist(strsplit(params$departements, ",")) |> trimws()
 
-# Typage et nettoyage minimal
+donnees <- get_ademe_data_multi(departements)
+
+if (is.null(donnees) || nrow(donnees) == 0) {
+stop("Aucune donnée n’a pu être récupérée via l’API ADEME.")
+}
+
 donnees <- donnees %>%
-  mutate(
-    code_departement_ban = as.character(code_departement_ban),
-    type_batiment = tolower(type_batiment),
-    etiquette_dpe = factor(etiquette_dpe, levels = c("A","B","C","D","E","F","G")),
-    etiquette_ges = factor(etiquette_ges, levels = c("A","B","C","D","E","F","G")),
-    conso = as.numeric(conso_5_usages_par_m2_ep),
-    surface = as.numeric(surface_habitable_logement),
-    annee_construction = as.numeric(annee_construction)
-  ) %>%
-  filter(!is.na(conso), conso >= 0, code_departement_ban %in% deps)
-
-# Filtre par type de bâtiment si demandé
-if (tolower(params$type_batiment) != "tous") {
-  donnees <- donnees %>% filter(type_batiment == tolower(params$type_batiment))
-}
-
-# Taille du jeu filtré
-n_obs <- nrow(donnees)
+mutate(
+conso = as.numeric(conso_5_usages_par_m2_ep),
+surface = as.numeric(surface_habitable_logement),
+code_departement_ban = as.character(code_departement_ban),
+etiquette_dpe = factor(etiquette_dpe, levels = c("A","B","C","D","E","F","G"))
+) %>%
+filter(!is.na(conso), !is.na(surface), conso > 0, surface > 0)
 ```
 
 # Indicateurs synthétiques (KPI)
@@ -160,11 +192,4 @@ ggplot(df_sc, aes(x = surface, y = conso)) +
 
 # Conclusion
 
-Cette étude comparative montre que la **classe DPE** est globalement informative (tendances centrées), mais que **la dispersion au sein de chaque classe** et la contribution modeste de variables simples (comme la surface) incitent à poursuivre l'analyse avec une approche multivariée (régression multiple, modèles hiérarchiques) et à intégrer davantage de caractéristiques (systèmes de chauffage, isolation, année de rénovation).  
-
----
-
-**Usage** : pour produire un rapport filtré, modifiez le paramètre `departements` et relancez :  
-```r
-rmarkdown::render("rapport_academique_dpe.Rmd", params = list(departements = "23", type_batiment = "tous"))
-```
+Cette étude comparative montre que la **classe DPE** est globalement informative (tendances centrées), mais que **la dispersion au sein de chaque classe** et la contribution modeste de variables simples (comme la surface) incitent à poursuivre l'analyse avec une approche multivariée (régression multiple, modèles hiérarchiques) et à intégrer davantage de caractéristiques (systèmes de chauffage, isolation, année de rénovation). 
