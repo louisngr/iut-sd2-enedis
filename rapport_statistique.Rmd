@@ -1,0 +1,197 @@
+---
+title: "Analyse comparative des consommations energetiques - DPE"
+author: "De Franceschi Lucas / Nugier Louis / Cerqueira Gregory"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: false
+    number_sections: false
+    df_print: paged
+  word_document:
+    toc: false
+  pdf_document:
+    toc: false
+params:
+  departements: '23,19,87'
+  type_batiment: tous
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.width=7, fig.height=4)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(readr)
+library(scales)
+
+# --- Fonction API ADEME ---
+get_ademe_data_multi <- function(departements = c("23", "19", "87"),
+                                 size = 10000,
+                                 dataset = "dpe03existant") {
+
+  base_url <- "https://data.ademe.fr/data-fair/api/v1/datasets"
+  full_url <- paste0(base_url, "/", dataset, "/lines")
+
+  results <- lapply(departements, function(dep) {
+    query <- list(
+      q = paste0("code_departement_ban:", dep),
+      size = size
+    )
+    res <- httr::GET(full_url, query = query)
+    httr::stop_for_status(res)
+    jsonlite::fromJSON(httr::content(res, as = "text", encoding = "UTF-8"))$results
+  })
+
+  dplyr::bind_rows(results)
+}
+```
+
+# Introduction
+
+La transition énergétique et la maîtrise de la consommation des logements sont des enjeux majeurs face aux défis climatiques et à la hausse des coûts de l'énergie.\
+Ce rapport, réalisé dans le cadre du projet *Enedis*, vise à étudier l'association entre la **classe DPE** (Diagnostic de Performance Énergétique) et la **consommation d'énergie primaire** (kWh/m²/an) sur trois départements du massif central : **Creuse (23)**, **Corrèze (19)** et **Haute‑Vienne (87)**.
+
+L'approche adoptée est **exploratoire et comparative** : après présentation et préparation des données, nous produisons quelques indicateurs synthétiques (KPI) et trois visualisations ciblées permettant de répondre à la problématique principale 
+**Dans quelle mesure la classe DPE et le type de bâtiment expliquent-ils la consommation ?** 
+
+# Méthodologie et données
+
+**Source des données** : jeux DPE fournis par l'API ADEME (jeu `dpe03existant`).
+
+**Variables principales utilisées** : 
+- `code_departement_ban` : code du département (23, 19, 87)\
+- `type_batiment` : type du logement (maison / appartement)\
+- `etiquette_dpe` : classe DPE (A → G)\
+- `etiquette_ges` : classe GES (A → G)\
+- `conso_5_usages_par_m2_ep` : consommation énergie primaire (kWh/m²/an)\
+- `surface_habitable_logement` : surface (m²)\
+- `annee_construction` : année de construction\
+- `_geopoint` : géolocalisation (latitude,longitude)
+
+**Prétraitement** : typage numérique des variables pertinentes, retrait des valeurs absentes/non valides sur la consommation, création éventuelle d'agrégats par commune et découpage temporel par période de construction. Pour les nuages de points séléction sur 80% des données pour une meilleure lecture et outliers non présent sur les boxplots.
+
+```{r data_prep}
+# --- Paramètres : parsing des départements ---
+deps <- strsplit(params$departements, ",")[[1]] %>% trimws()
+
+# --- Chargement des données depuis l'API ADEME ---
+donnees <- get_ademe_data_multi(
+  departements = deps,
+  size = 10000,
+  dataset = "dpe03existant"
+)
+
+# --- Typage et nettoyage minimal ---
+donnees <- donnees %>%
+  mutate(
+    code_departement_ban = as.character(code_departement_ban),
+    type_batiment = tolower(type_batiment),
+    etiquette_dpe = factor(etiquette_dpe, levels = c("A","B","C","D","E","F","G")),
+    etiquette_ges = factor(etiquette_ges, levels = c("A","B","C","D","E","F","G")),
+    conso = as.numeric(conso_5_usages_par_m2_ep),
+    surface = as.numeric(surface_habitable_logement),
+    annee_construction = as.numeric(annee_construction)
+  ) %>%
+  filter(
+    !is.na(conso),
+    conso >= 0,
+    code_departement_ban %in% deps
+  )
+
+# --- Filtre par type de bâtiment si demandé ---
+if (tolower(params$type_batiment) != "tous") {
+  donnees <- donnees %>%
+    filter(type_batiment == tolower(params$type_batiment))
+}
+
+# --- Taille finale du jeu filtré ---
+n_obs <- nrow(donnees)
+
+
+# Indicateurs synthétiques (KPI)
+
+```{r kpi}
+kpi <- donnees %>%
+  summarise(
+    conso_moy_KWh_m2_an = round(mean(conso, na.rm = TRUE), 1),
+    conso_med_KWh_m2_an = round(median(conso, na.rm = TRUE), 1),
+    surface_moy_m2 = round(mean(surface, na.rm = TRUE), 1)
+  )
+kable(kpi, caption = "Indicateurs synthétiques pour les départements analysés")
+```
+
+# Résultats
+
+## 1. Répartition des classes DPE par département
+
+La figure suivante compare la part relative de chaque classe DPE entre les départements étudiés. Cette comparaison met en évidence d'éventuelles différences structurelles du parc (ex. part plus élevée de classes défavorables).
+
+```{r fig-dpe-dist, fig.cap="Répartition des classes DPE — comparaison 23 / 19 / 87"}
+dpe_colors <- c(A="#009933", B="#33cc33", C="#ccff33", D="#ffcc00", E="#ff9900", F="#ff6600", G="#ff0000")
+df_dpe <- donnees %>%
+  group_by(code_departement_ban, etiquette_dpe) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(code_departement_ban) %>%
+  mutate(prop = n / sum(n))
+
+ggplot(df_dpe, aes(x = etiquette_dpe, y = prop, fill = etiquette_dpe)) +
+  geom_col() +
+  facet_wrap(~ code_departement_ban, nrow = 1) +
+  scale_fill_manual(values = dpe_colors, drop = FALSE) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  labs(x = "Classe DPE", y = "Proportion", title = "Répartition des classes DPE par département") +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+```
+
+**Interprétation (bref)** : si un département présente proportionnellement plus de classes D–G, cela suggère un parc plus énergivore qui peut nécessiter prioritairement des actions d'amélioration énergétique.
+
+## 2. Relation consommation ↔ classe DPE (boxplot)
+
+La figure suivante montre la distribution de la consommation (kWh/m²/an) pour chaque classe DPE — l'objectif est de vérifier la tendance attendue : classes A–C associées à des consommations plus faibles.
+
+```{r fig-dpe-box, fig.cap="Consommation par classe DPE (boxplot)"}
+ggplot(donnees, aes(x = etiquette_dpe, y = pmin(conso, 1000), fill = etiquette_dpe)) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_manual(values = dpe_colors, drop = FALSE) +
+  coord_cartesian(ylim = c(0, 700)) +
+  labs(x = "Classe DPE", y = "Consommation (kWh/m²/an)", title = "Consommation par classe DPE") +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+```
+
+**Interprétation** : la médiane et la dispersion par classe renseignent sur la capacité prédictive de la classe DPE ; une large dispersion au sein d'une même classe signale la présence d'autres facteurs explicatifs (surface, année de construction, chauffage...).
+
+## 3. Corrélation surface <-> consommation (nuage de points + régression)
+
+On examine la relation entre la surface habitable et la consommation. Un modèle de régression linéaire simple et ajusté pour quantifier l'association (R²).
+
+```{r fig-scatter, fig.cap="Surface vs consommation — nuage de points et droite de régression"}
+df_sc <- donnees %>% filter(!is.na(surface) & surface > 0 & conso < 2000)
+if (nrow(df_sc) > 2) {
+  lm_mod <- lm(conso ~ surface, data = df_sc)
+  r2 <- round(summary(lm_mod)$r.squared, 3)
+} else {
+  r2 <- NA
+}
+ggplot(df_sc, aes(x = surface, y = conso)) +
+  geom_point(alpha = 0.4, size = 1.5) +
+  geom_smooth(method = "lm", se = TRUE, color = "#d62728") +
+  labs(x = "Surface (m²)", y = "Consommation (kWh/m²/an)", subtitle = paste0("R² = ", r2),
+       title = "Surface vs consommation") +
+  theme_minimal()
+```
+
+**Interprétation (bref)** : un R² faible indique que la surface seule explique peu de la variabilité ; il convient alors d'introduire d'autres variables pour un modèle explicatif robuste.
+
+# Discussion et limites
+
+-   **Caractère exploratoire** : les analyses présentées sont descriptives et ne substituent pas à une modélisation multivariée complète.\
+-   **Qualité des données** : données issues d'API publiques peuvent contenir des erreurs, des valeurs manquantes et des biais d'échantillonnage.\
+-   **Outliers et découpage** : nous avons limité l'affichage pour la clarté (p.ex. coupure à 700 kWh/m²/an) ; ces choix influencent la perception des distributions.\
+-   **Variables non observées** : type de chauffage, comportement des occupants, rénovations récentes ne sont pas nécessairement capturés mais influencent fortement la consommation.
+
+# Conclusion
+
+Cette étude comparative montre que la **classe DPE** est globalement informative (tendances centrées), mais que **la dispersion au sein de chaque classe** et la contribution modeste de variables simples (comme la surface) incitent à poursuivre l'analyse avec une approche multivariée (régression multiple, modèles hiérarchiques) et à intégrer davantage de caractéristiques (systèmes de chauffage, isolation, année de rénovation).
+
