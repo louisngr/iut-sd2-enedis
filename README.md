@@ -51,6 +51,6 @@ L'application est développée en R et nécessite les packages suivants :
     - Branche 'Application' intégrant le code `app.R` et comment le deployer sur ShinyApps.io grâce au fichier 'Deploy.R'
     - Branche 'Documentation' avec les fichiers markdown et le Rmarkdown.
     - Une branche par élève du groupe (trois branches supplémentaires) pour que chacun puisse avancer de son coté selon notre organisation.
--   Un déploiement initial avait été réalisé sur shinyapps.io mais n’a pas été réactualisé en raison de limitations de taille et de librairies. Il donne toutefois une base visuelle du début du projet :\
-    <https://diagnosticenedis.shinyapps.io/projet_enedis/>
-- Le lien de la vidéo de demonstration se trouve ici : [youtube.com](https://youtu.be/-rqLJIoq6tM)
+-   Un déploiement sur shinyapps.io à été réalisé pour pouvoir avoir la version de l'application en ligne et disponible pour tout le monde sans avoir besoin de R Studio: 
+  [Shiny Apps](https://diagnosticenedis.shinyapps.io/enedis/)
+- Le lien de la vidéo de demonstration se trouve ici : [Youtube](https://youtu.be/-rqLJIoq6tM)
