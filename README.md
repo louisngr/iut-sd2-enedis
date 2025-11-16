@@ -47,8 +47,10 @@ L'application est développée en R et nécessite les packages suivants :
 
 -   Le fichier `app.R` contient des commentaires générés par IA, mais le développement a été fait au fur et à mesure. L’objectif était d'avoir une meilleure compréhension et une incrémentation propre.
 -   Le dépôt GitHub comporte quatre branches :
-    - Branche principale
-    - Branche 'fonctionnelle' intégrant l’ajout du code `app.R` lorsqu’il ne présentait aucun problème\
-    - Une branche par élève du groupe (trois branches supplémentaires)
+    - Branche 'main' dans laquelle vous êtes qui décrit le projet.
+    - Branche 'Application' intégrant le code `app.R` et comment le deployer sur ShinyApps.io grâce au fichier 'Deploy.R'
+    - Branche 'Documentation' avec les fichiers markdown et le Rmarkdown.
+    - Une branche par élève du groupe (trois branches supplémentaires) pour que chacun puisse avancer de son coté selon notre organisation.
 -   Un déploiement initial avait été réalisé sur shinyapps.io mais n’a pas été réactualisé en raison de limitations de taille et de librairies. Il donne toutefois une base visuelle du début du projet :\
     <https://diagnosticenedis.shinyapps.io/projet_enedis/>
+- Le lien de la vidéo de demonstration se trouve ici : <youtube.com>
