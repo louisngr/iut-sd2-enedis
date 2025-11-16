@@ -53,4 +53,4 @@ L'application est développée en R et nécessite les packages suivants :
     - Une branche par élève du groupe (trois branches supplémentaires) pour que chacun puisse avancer de son coté selon notre organisation.
 -   Un déploiement initial avait été réalisé sur shinyapps.io mais n’a pas été réactualisé en raison de limitations de taille et de librairies. Il donne toutefois une base visuelle du début du projet :\
     <https://diagnosticenedis.shinyapps.io/projet_enedis/>
-- Le lien de la vidéo de demonstration se trouve ici : <youtube.com>
+- Le lien de la vidéo de demonstration se trouve ici : [youtube.com](https://youtu.be/-rqLJIoq6tM)
